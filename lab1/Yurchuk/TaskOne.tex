@@ -1,0 +1,77 @@
+\section{Невеличкий вступ}
+
+Технологія блокчейн кардинально змінила наше уявлення про децентралізовані обчислення, фінансові транзакції та бездовірчі 
+системи (trustless systems). З моменту публікації "Bitcoin whitepaper"{}~\cite{nakamoto2008} by Satoshi Nakamoto в 2008 році, 
+з'явилося безліч платформ блокчейн, кожна з яких має свої архітектурні рішення, процедури розгортання та операційні характеристики.
+
+У своїй лабораторній, я розглядав і порівнював, здебільшого зазначені в завданнях до лабораторної, особливості розгортання п'яти 
+основних систем блокчейну/криптовалюти: \textbf{Ethereum}~\cite{buterin2014, wood2018}, \textbf{Bitcoin}~\cite{nakamoto2008}, 
+\textbf{Dash}~\cite{dash2015}, \textbf{NEO}~\cite{neo2018} та \textbf{Litecoin}~\cite{litecoin}. 
+Свій аналіз я спрямував більше на практичні аспекти реалізації, розгортання та конфігурації кожної системи, вивченні їх базової 
+архітектури, механізмів консенсусу, мережевих рівнів та можливості обміну модулями між ними.
+
+Поки в планах наступне: у розділі 2 описати теоретичні основи кожної системи, далі в розділі 3 доволі детально порівняти їх за різними 
+параметрами, розглянути їх взаємозамінність. А далі у розділі 4 планую навести покрокові, як я робитиму, практичне розгортання Ethereum 
+(певно найпростіше, що можна взяти) у середовищі на базі WSL за setup-ами від~\cite{pathirana2019, pradeep2020}. І відповідно в кінці підбити підсумки по отриманих результатах.
+
+\section{Огляд систем блокчейн і криптовалют}
+
+\subsection{Bitcoin}
+
+Bitcoin -- це певно перша і найвідоміша криптовалюта, опублікована в 2008 році анонімним девелопером з псевдонімом Сатоші Накамото. 
+Вона використовує модель \textbf{UTXO (Unspent Transaction Output)} для відстеження балансів і механізм консенсусу \textbf{Proof-of-Work}, 
+заснований на алгоритмі хешування SHA-256.
+
+Ключові особливості Bitcoin включають в себе:
+\begin{itemize}[nosep]
+    \item \textbf{Жодних смарт-контрактів} (в традиційному сенсі) -- Bitcoin Script навмисно є non-Turing-complete.
+    \item \textbf{Block time} -- генерація нового блоку $\approx 10$ хвилин, \textbf{block size} обмежений $\approx 1$--$4$ MB (з SegWit).
+    \item \textbf{Загальний обсяг} обмежений 21 мільйоном BTC.
+    \item \textbf{Networking} -- використосує особливий мережевий P2P protocol через TCP (port 8333), розповсюдження інформації на основі gossip-based ("пліткування з сусідами").
+\end{itemize}
+
+\subsection{Ethereum}
+
+Ethereum -- відкрита розподілена обчислювальна платформа на основі блокчейну, яка підтримує функціональність смарт-контрактів. 
+На відміну від Bitcoin, який був розроблений \underline{в першу чергу} як цифрова валюта, Ethereum був задуманий як універсальний 
+програмований блокчейн \textcolor{red}{(!)}. Власна криптовалюта блокчейну Ethereum це \textbf{Ether (ETH)}.
+
+\noindent Основні архітектурні особливості Ethereum включають:
+\begin{itemize}[nosep]
+    \item \textbf{Ethereum Virtual Machine (EVM)} -- віртуальна машина, яка виконує смарт-контракти, з повною функціональністю 
+        Тюрінга (це такий а-ля емулятор для виконання програм за скінченний час і пам'ять);
+    \item \textbf{State model} -- модель на основі облікових записів діє як банківська книга, відстежуючи баланс і забезпечує 
+        можливість укладання складних смарт-контрактів. (в Bitcoin застосовується UTXO model, де рахунки ефективно управляються смарт-контрактами,
+        і в якій забезпечується вищий рівень конфіденційності та здійснюється паралельна обробка даних);
+    \item \textbf{Protocol of Consensus} -- первісно застосовувався Proof-of-Work (Ethash), але у вересні 22 зробили трансфер на Proof-of-Stake (Casper/Beacon chain);
+    \item \textbf{Smart Contracts} -- пишуться мовами Solidity, Vyper та деякими іншими мовами і є EVM-compatible;
+    \item \textbf{Gas system} -- обчислювальні витрати вимірюються за допомогою так званих тарифів "gas fees".
+\end{itemize}
+
+Ethereum -- це peer-to-peer надбудова над базою інтернет протоколів TCP/IP~\cite{dagan2018}. Кожен вузол запускає копію 
+блокчейну та бере участь у валідації та розповсюдженні блоків. Офіційний клієнт \textbf{Geth} (Go-Ethereum) реалізує протокол 
+RLC (Remote Procedure Call) Node Discovery Protocol, що базується на DHT (Distributed Hash Table) типу Kademlia для виявлення 
+однорангових вузлів (peers)~\cite{dagan2018}.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=1.2cm and 2cm,
+        block/.style={rectangle, draw, fill=ethpurple!15, minimum width=3cm, minimum height=0.8cm, align=center, rounded corners=2pt},
+        arrow/.style={-{Stealth[length=3mm]}, thick}
+        ]
+        \node[block] (app) {DApp / User};
+        \node[block, below=of app] (sc) {Smart Contracts (EVM)};
+        \node[block, below=of sc] (consensus) {Consensus Layer\\(PoS / formerly PoW)};
+        \node[block, below=of consensus] (p2p) {P2P Network\\(RLC / devp2p)};
+        \node[block, below=of p2p] (net) {Internet (TCP/UDP)};
+
+        \draw[arrow] (app) -- (sc);
+        \draw[arrow] (sc) -- (consensus);
+        \draw[arrow] (consensus) -- (p2p);
+        \draw[arrow] (p2p) -- (net);
+    \end{tikzpicture}
+    \caption{Архітектура "шарів"{} Ethereum-а}
+    \label{fig:eth-arch}
+\end{figure}
+
