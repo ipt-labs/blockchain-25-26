@@ -140,3 +140,283 @@ Litecoin був створений Чарлі Лі в 2011 році як "пол
 \end{table}
 
 \subsection{Архітектура мережі та P2P-взаємодія}
+
+Всі п'ять систем працюють як однорангові децентралізовані (peer-to-peer) мережі, побудовані поверх мережі Інтернет. 
+Однак їхні протоколи виявлення однорангових вузлів і комунікації значно відрізняються.
+
+\textbf{Ethereum} використовує набір протоколів devp2p, який включає протокол виявлення вузлів RLPx на основі модифікованого 
+DHT Kademlia. Кожен вузол ідентифікується за допомогою ідентифікатора \texttt{enode} (хеш SHA3 його відкритого ключа). 
+Реалізація Kademlia використовує метрику відстані на основі XOR з 256 сегментами, кожен з яких містить до 16 записів. 
+Виявлення однорангових вузлів (peers) використовує чотири типи повідомлень UDP: \texttt{ping}, \texttt{pong}, 
+\texttt{findnode} та \texttt{neighbors}. Передача даних відбувається через зашифровані TCP-з'єднання з використанням 
+транспортного протоколу RLPx із використанням шифрування ECIES (Elliptic Curve Integrated Encryption Scheme).
+
+\textbf{Bitcoin і Litecoin} використовують простіший P2P-протокол на основі обміну інформацією (gossip-based). Masternodes 
+виявляють однорангові вузли за допомогою DNS-посівів і поширення повідомлень \texttt{addr}. Протокол працює через 
+TCP (Bitcoin на порту 8333, Litecoin на порту 9333). Структурованого DHT немає; натомість вузли підтримують базу 
+даних \texttt{addrman} (address manager) відомих однорангових вузлів.
+
+\textbf{Dash} розширює протокол P2P Bitcoin окремим masternode layer. Masternodes утворюють накладну мережу другого 
+рівня з детермінованим порядком, що дозволяє використовувати такі функції, як InstantSend quorums і CoinJoin mixing rounds.
+
+\textbf{NEO} використовує структурований механізм виявлення однорангових вузлів із seed nodes. Консенсус dBFT вимагає 
+меншого набору вузлів консенсусу (наразі 7 в основній мережі), які "спілкуються"{} через спеціальний канал консенсусу.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+            peer/.style={circle, draw, fill=ethpurple!20, minimum size=0.7cm, inner sep=0pt, font=\tiny},
+            master/.style={circle, draw, fill=btcorange!30, minimum size=0.9cm, inner sep=0pt, font=\tiny},
+            boot/.style={circle, draw, fill=neogreen!30, minimum size=0.9cm, inner sep=0pt, font=\tiny\bfseries},
+            conn/.style={-, thin, gray!60},
+            highlight/.style={-, thick, ethpurple}
+        ]
+        % Ethereum-style network
+        \begin{scope}[shift={(-4,0)}]
+            \node[boot] (b1) at (0,2) {Bootnode};
+            \node[peer] (e1) at (-1.5,0.5) {N1};
+            \node[peer] (e2) at (0,0) {N2};
+            \node[peer] (e3) at (1.5,0.5) {N3};
+            \node[peer] (e4) at (-0.8,-1.2) {N4};
+            \node[peer] (e5) at (0.8,-1.2) {N5};
+
+            \draw[conn] (b1) -- (e1);
+            \draw[conn] (b1) -- (e2);
+            \draw[conn] (b1) -- (e3);
+            \draw[conn] (e1) -- (e2);
+            \draw[conn] (e2) -- (e3);
+            \draw[conn] (e1) -- (e4);
+            \draw[conn] (e3) -- (e5);
+            \draw[conn] (e4) -- (e5);
+            \draw[conn] (e2) -- (e4);
+            \draw[conn] (e2) -- (e5);
+
+            \node[below, font=\small\bfseries] at (0,-2) {Ethereum (Kademlia)};
+        \end{scope}
+
+        % Bitcoin-style network
+        \begin{scope}[shift={(0,0)}]
+            \node[peer] (b1) at (0,1.8) {N1};
+            \node[peer] (b2) at (-1.3,0.6) {N2};
+            \node[peer] (b3) at (1.3,0.6) {N3};
+            \node[peer] (b4) at (-0.8,-0.8) {N4};
+            \node[peer] (b5) at (0.8,-0.8) {N5};
+
+            \draw[conn] (b1) -- (b2);
+            \draw[conn] (b1) -- (b3);
+            \draw[conn] (b2) -- (b4);
+            \draw[conn] (b3) -- (b5);
+            \draw[conn] (b4) -- (b5);
+            \draw[conn] (b2) -- (b3);
+
+            \node[below, font=\small\bfseries] at (0,-2) {Bitcoin/LTC (Gossip)};
+        \end{scope}
+
+        % Dash-style network (two layers)
+        \begin{scope}[shift={(4,0)}]
+            \node[master] (m1) at (0,2) {MN};
+            \node[master] (m2) at (-1.2,1) {MN};
+            \node[master] (m3) at (1.2,1) {MN};
+            \node[peer] (d1) at (-1.3,-0.3) {N1};
+            \node[peer] (d2) at (0,-0.6) {N2};
+            \node[peer] (d3) at (1.3,-0.3) {N3};
+
+            % Masternode layer
+            \draw[highlight] (m1) -- (m2);
+            \draw[highlight] (m1) -- (m3);
+            \draw[highlight] (m2) -- (m3);
+            % Regular connections
+            \draw[conn] (m2) -- (d1);
+            \draw[conn] (m3) -- (d3);
+            \draw[conn] (d1) -- (d2);
+            \draw[conn] (d2) -- (d3);
+            \draw[conn] (m1) -- (d2);
+
+            \node[below, font=\small\bfseries] at (0,-2) {Dash (Two-tier)};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Топології мереж P2P для різних блокчейнів}
+    \label{fig:p2p-networks}
+\end{figure}
+
+\subsection{Структури даних та управління станами}
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {X[1.5,l] X[2,l] X[2,l] X[2,l]},
+            hlines, vlines,
+            row{1} = {bg=ethpurple!20, font=\bfseries},
+            rows = {m},
+        }
+        Блокчейн & Станова модель  & Структура даних               & Cховище           \\
+        Ethereum & Account-based   & Modified Merkle-Patricia Trie & LevelDB / Pebble  \\
+        Bitcoin  & UTXO            & Merkle Tree                   & LevelDB           \\
+        Dash     & UTXO (extended) & Merkle Tree + MN lists        & LevelDB / RocksDB \\
+        NEO      & Account-based   & Merkle Tree + state root      & LevelDB           \\
+        Litecoin & UTXO            & Merkle Tree                   & LevelDB           \\
+    \end{tblr}
+    \caption{Станові моделі і структури даних в блокчейнах}
+    \label{tab:datastructures}
+\end{table}
+
+Фундаментальна різниця між account-based системами (Ethereum, NEO) та UTXO (Bitcoin, Dash, Litecoin) проявляється в 
+в процесі розгортання та взаємозамінності модулів. У системах UTXO кожна транзакція споживає попередні виходи та створює 
+нові. У account-based системах глобальний стан явно відстежує залишки на рахунках та cховище контрактів.
+
+\subsection{Можливості смарт-контрактів}
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {X[1.5,l] X[1.5,l] X[2,l] X[2,l]},
+            hlines, vlines,
+            row{1} = {bg=ethpurple!20, font=\bfseries},
+            rows = {m},
+        }
+        Блокчейн & Віртувальне середовище & Мови програмування    & Здібності блокчейну       \\
+        Ethereum & EVM                    & Solidity, Vyper       & Turing-complete           \\
+        Bitcoin  & Bitcoin Script         & Script opcodes        & Non-Turing-complete       \\
+        Dash     & ---                    & ---                   & No native smart contracts \\
+        NEO      & NeoVM                  & C\#, Python, Java, Go & Turing-complete           \\
+        Litecoin & Bitcoin Script         & Script opcodes        & Non-Turing-complete       \\
+    \end{tblr}
+    \caption{Порівняння можливостей блокчейнів щодо смарт-контрактів}
+    \label{tab:smartcontracts}
+\end{table}
+
+
+\subsection{Deployment Parameters and Requirements}
+
+В наступній таблиці хочу навести основні параметри розгортання для запуску повного вузла блокчейну:
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {X[1.5,l] X[1.2,c] X[1.2,c] X[1.2,c] X[1.8,c]},
+            hlines, vlines,
+            row{1} = {bg=ethpurple!20, font=\bfseries},
+            rows = {m},
+        }
+        Блокчейн & RAM (min) & ROM (min)    & Default Port & Primary Client    \\
+        Ethereum & 8 GB      & $\sim$1 TB+  & 30303        & Geth / Nethermind \\
+        Bitcoin  & 2 GB      & $\sim$600 GB & 8333         & Bitcoin Core      \\
+        Dash     & 4 GB      & $\sim$40 GB  & 9999         & Dash Core         \\
+        NEO      & 4 GB      & $\sim$20 GB  & 10333        & neo-cli (C\#)     \\
+        Litecoin & 2 GB      & $\sim$120 GB & 9333         & Litecoin Core     \\
+    \end{tblr}
+    \caption{Параметри розгортання mainnet у 2024--2025 роках}
+    \label{tab:deployment}
+\end{table}
+
+\subsection{Конфігурація генезис-блоку}
+
+Будь який блокчейн починається з так званого \textbf{генезис-блоку (genesis block)}. У приватних/тестових розгортаннях його конфігурація визначає початкові параметри мережі. Нижче наведено приклад для Ethereum (\texttt{genesis.json}):
+\begin{code}
+    {
+    "config": {
+    "chainId": 12345,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0
+    },
+    "alloc": {},
+    "coinbase": "0x0000000000000000000000000000000000000000",
+    "difficulty": "0x400",
+    "extraData": "0x00",
+    "gasLimit": "0x8000000",
+    "nonce": "0x0000000000000042",
+    "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "timestamp": "0x0"
+    }
+\end{code}
+
+\noindent Основними важливими полями є:
+\begin{itemize}[nosep]
+    \item \texttt{chainId} -- унікальний ідентифікатор, що відрізняє створювану приватну мережу від основної мережі (chainId=1).
+    \item \texttt{difficulty} -- контролює складність майнінгової головоломки (mining puzzle complexity); нижчі значення дозволяють швидший майнінг у тестових середовищах.
+    \item \texttt{gasLimit} -- максимальний дозволений обсяг гасу на блок, що встановлює верхню межу для виконання контракту.
+    \item \texttt{alloc} -- дозволяє ініціалізувати (робити pre-funding) рахунків валютою Ether при їх створенні.
+    \item Поля \texttt{*Block} вказують, під яким номером блоку активуються різні EIP (пропозиції щодо вдосконалення Ethereum) та хард-форки. Встановлення всіх значень на 0 дозволяє активувати всі функції з самого початку.
+\end{itemize}
+
+\paragraph{} Для порівняння, генезисний блок Bitcoin hard-coded в клієнтському програмному забезпеченні і не може бути налаштований 
+таким же чином. Тому при розгортанні тестової мережі Bitcoin або мережі regtest параметри модифікуються під час компіляції 
+за допомогою констант або прапорців конфігурації (\texttt{-regtest}, \texttt{-testnet}).
+
+\subsection{Створення блоків і час їх генерації}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                ybar,
+                bar width=0.8cm,
+                ylabel={Block Time (seconds)},
+                symbolic x coords={Ethereum, Bitcoin, Dash, NEO, Litecoin},
+                xtick=data,
+                ymin=0,
+                ymax=700,
+                nodes near coords,
+                nodes near coords align={vertical},
+                every node near coord/.append style={font=\small},
+                width=0.85\textwidth,
+                height=7cm,
+                grid=major,
+                grid style={dashed, gray!30},
+                xticklabel style={rotate=0, anchor=north},
+            ]
+            \addplot[fill=ethpurple!60] coordinates {
+                    (Ethereum, 12)
+                    (Bitcoin, 600)
+                    (Dash, 150)
+                    (NEO, 15)
+                    (Litecoin, 150)
+                };
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Середній час генерації блоків (в секундах)}
+    \label{fig:blocktimes}
+\end{figure}
+
+\subsection{Пропускна здатність}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                ybar,
+                bar width=0.8cm,
+                ylabel={Transactions per Second (TPS)},
+                symbolic x coords={Ethereum, Bitcoin, Dash, NEO, Litecoin},
+                xtick=data,
+                ymin=0,
+                ymax=1200,
+                nodes near coords,
+                nodes near coords align={vertical},
+                every node near coord/.append style={font=\small},
+                width=0.85\textwidth,
+                height=7cm,
+                grid=major,
+                grid style={dashed, gray!30},
+            ]
+            \addplot[fill=btcorange!60] coordinates {
+                    (Ethereum, 30)
+                    (Bitcoin, 7)
+                    (Dash, 56)
+                    (NEO, 1000)
+                    (Litecoin, 56)
+                };
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Приблизна пропускна здатність транзакцій базового рівня (TPS) для різних блокчейнів}
+    \label{fig:tps}
+\end{figure}
