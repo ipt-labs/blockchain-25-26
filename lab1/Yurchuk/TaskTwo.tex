@@ -28,7 +28,12 @@
     sudo apt install -y software-properties-common build-essential curl wget
 \end{code}
 
-\textbf{Screenshot point \#1:} Capture the Ubuntu version output confirming successful installation.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{screenshots/screen1.png}
+    \caption{Ubuntu version output confirming successful installation}
+    \label{fig:screen1}
+\end{figure}
 
 \noindent \textbf{Крок 2:} Встановлюємо Geth (Go-Ethereum)
 
@@ -46,7 +51,12 @@
 
 P.S. Можна було і по-старічковому просто скачати бінарник з сайту:) \\ \url{https://geth.ethereum.org/downloads/}
 
-\textbf{Screenshot point \#2:} Capture the \texttt{geth version} output.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen2.png}
+    \caption{\texttt{geth version} output}
+    \label{fig:screen2}
+\end{figure}
 
 \noindent \textbf{Крок 3:} Створюємо структуру робочої директорії для приватної мережі. Ми будемо запускати два вузли, тому створюємо 
 папки для кожного з них, а також папку для логів.
@@ -92,7 +102,12 @@ cat > genesis.json << 'EOF'
 EOF
 \end{code}
 
-\textbf{Screenshot point \#3:} Capture the contents of \texttt{genesis.json} showing the configuration parameters.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen3.png}
+    \caption{\texttt{genesis.json} \& it's configuration parameters.}
+    \label{fig:screen3}
+\end{figure}
 
 \noindent \textbf{Крок 5:} Ініціалізуємо блокчейн для ноди 1.
 
@@ -100,9 +115,14 @@ EOF
     geth --datadir ~/eth-private/node1 init ~/eth-private/genesis.json
 \end{code}
 
-Все як і очікували: "Successfully wrote genesis state."{}.
+Все як і очікували: "Successfully wrote genesis state"{}.
 
-\textbf{Screenshot point \#4:} Capture the initialization output confirming successful genesis state creation.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{screenshots/screen4.png}
+    \caption{\texttt{geth init} output confirming successful genesis state creation}
+    \label{fig:screen4}
+\end{figure}
 
 \subsection{Запуск приватної мережі}
 
@@ -120,7 +140,7 @@ EOF
 \end{code}
 
 Щось наплутав з конфігурацією власного Geth ланцюга і Geth повідомляє що "цей ланцюг вже пройшов злиття"{}. Тож 
-перестворимо з чистого каталогу без попередньо існуючих даних ланцюжка і у dev mode.
+перестворимо з чистого каталогу без попередньо існуючих даних ланцюжка і у dev mode (мало бути на фото~\ref{fig:screen5}).
 
 \subsection{Спроба 2: Використання dev mode для швидкого розгортання}
 
@@ -155,8 +175,12 @@ EOF
     eth.blockNumber
 \end{code}
 
-\textbf{Screenshot point \#5:} Capture the Geth console output showing the dev mode initialization and the 
-pre-funded account address. Capture the account address, balance, and block number in the Geth console.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen5.png}
+    \caption{Initialization and pre-funded account details}
+    \label{fig:screen5}
+\end{figure}
 
 \noindent \textbf{Крок 8:} Створюємо другий рахунок для тестування транзакцій.
 
@@ -171,8 +195,12 @@ pre-funded account address. Capture the account address, balance, and block numb
     eth.accounts
 \end{code}
 
-\textbf{Screenshot point \#6:} Capture the account creation output showing the new address and keystore file path. 
-Capture the account creation output (second terminal) and the \texttt{eth.accounts} listing showing both addresses.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen6.png}
+    \caption{Account creation output showing the new address and keystore file path}
+    \label{fig:screen6}
+\end{figure}
 
 \noindent \textbf{Крок 9:} Створимо першу транзакцію.
 
@@ -194,7 +222,12 @@ Capture the account creation output (second terminal) and the \texttt{eth.accoun
     web3.fromWei(eth.getBalance(eth.accounts[1]), "ether")
 \end{code}
 
-\textbf{Screenshot point \#7:} Capture the transaction hash, block number increment, and recipient balance of 5~ETH.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen7.png}
+    \caption{Transaction details and recipient balance}
+    \label{fig:screen7}
+\end{figure}
 
 \noindent \textbf{Крок 10:} Подивимося деталі блоку та самої транзакції:
 
@@ -207,11 +240,16 @@ Capture the account creation output (second terminal) and the \texttt{eth.accoun
 \end{code}
 
 Оскільки у нас тестова мережа, то маємо автоматичне підтвердження блоків у момент відправлення транзакції -- у 
-реальній мережі нам довелося б чекати, поки валідатор включить її (+- 12 блоків, або 2-3 хв).
+реальній мережі нам довелося б чекати, поки валідатор включить її ($\pm$ 12 блоків, або 2-3 хв).
 
-\textbf{Screenshot point \#8:} Capture \texttt{eth.getBlock(1)} output showing the block structure.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen8.png}
+    \caption{Block transaction details and metadata}
+    \label{fig:screen8}
+\end{figure}
 
-Тут вже можна поглянути на деталі транзакції і самого блоку, куди вона була включена. 
+Тут вже можна поглянути на деталі транзакції і самого блоку, куди вона була включена.
 \begin{itemize}[nosep]
     \item \texttt{difficulty: 0} -- підтверджує, що це post-Merge PoS chain;
     \item \texttt{gasUsed: 21000} -- це стандартна вартість простого переказу ETH. Кожна транзакція Ethereum має 
@@ -226,14 +264,24 @@ Capture the account creation output (second terminal) and the \texttt{eth.accoun
 Відкриємо Geth на другому терміналі (де ми створювали другий акаунт) і створимо другу ноду для peer з'єднання. Це 
 демонструватиме peer-to-peer networking з нашого, описаного в пункті 4, прикладі.
 
-\textbf{Screenshot point \#9:} Capture the second terminal showing the initialization of the second node with the same genesis file.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.65\textwidth]{screenshots/screen9.png}
+    \caption{Second node initialization with the same genesis file}
+    \label{fig:screen9}
+\end{figure}
 
 Адреса enode закінчується на :0 замість :30303, а це означає, що Node 1 не шейрить свій порт прослуховування 
 правильно, оскільки режим --dev все ж розроблений як одновузлове середовище. І як я одразу про це не прочитав? 
 Ну ладно, доведеться закривати ноду 1 і спробувати перестворити, використавши --dev admin API mode для ручного підключення вузлів. 
 Порт показує :0 у рядку enode, але вузли все одно можуть підключатися, якщо ми використовуємо шлях IPC (Inter-Process Communication) безпосередньо. Спершу перевіримо фактичний стан прослуховування мережі:
 
-\textbf{Screenshot point \#10:} Capture the output of \texttt{net.listening} and \texttt{net.peerCount} in the Geth console.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.3\textwidth]{screenshots/screen10.png}
+    \caption{Network listening and peer count status}
+    \label{fig:screen10}
+\end{figure}
 
 net.listening є істинним, але обидва порти мають значення 0. Це підтверджує, що режим --dev приймає ідею мережевого зв'язку, 
 але фактично не відкриває жодних портів для з’єднання. Це можна назвати дверима з написом «відкрито», але без ручки, хах. 
@@ -283,7 +331,12 @@ PoW і було зробило параметр terminalTotalDifficulty (TTD) к
 Значення 999999999999 \texttt{terminalTotalDifficulty} ланцюг ніколи не досягне шляхом майнінгу, ефективно 
 утримуватиме його в режимі до злиття, одночасно задовольняючи обов'язкові вимоги до конфігурації Geth.
 
-\textbf{Screenshot point \#11:} Capture the contents of \texttt{genesis-pow.json} showing the new configuration parameters, especially the high \texttt{terminalTotalDifficulty}.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen11.png}
+    \caption{Contents of updated\texttt{genesis-pow.json}}
+    \label{fig:screen11}
+\end{figure}
 
 \begin{code}
     geth --datadir ~/eth-private/pow-node1 \
@@ -292,7 +345,12 @@ PoW і було зробило параметр terminalTotalDifficulty (TTD) к
     init ~/eth-private/genesis-pow.json
 \end{code}
 
-\textbf{Screenshot point \#12:} Capture the initialization output from both nodes showing "Successfully wrote genesis state" with matching genesis hashes.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen12.png}
+    \caption{Initialization output from both nodes with matching genesis hashes}
+    \label{fig:screen12}
+\end{figure}
 
 Обидва вузли ініціалізовані однаковим гешем генезис блоку. Це є надзвичайно важливим, оскільки вузли можуть з'єднуватися 
 лише за умови, що вони мають однаковий блок генезису.
@@ -316,7 +374,12 @@ PoW і було зробило параметр terminalTotalDifficulty (TTD) к
     admin.peers
 \end{code}
 
-\textbf{Screenshot point \#13:} Capture the enode URL from Node~1 and the output of \texttt{admin.addPeer()} in Node~2 showing a successful connection.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{screenshots/screen13.png}
+    \caption{Success peer connectionof Node~1 to Node~2's}
+    \label{fig:screen13}
+\end{figure}
 
 Вихідні дані \texttt{admin.peers} містять важливу інформацію про нашу мережу:
 \begin{itemize}[nosep]
@@ -328,7 +391,12 @@ PoW і було зробило параметр terminalTotalDifficulty (TTD) к
 \noindent В вересні 2022 року з переходом PoW на PoS процес майнінгу (mining API) ефіру (ETH) було припинено. Тому, на жаль, не 
 вийде показати цей процес з подальшою синхронізацією нового блоку на всі ноди навіть у тестовій мережі.
 
-\textbf{Screenshot point \#14:} Capture unsuccessful attempts to use mining commands in the Geth console, confirming their deprecation in post-Merge versions.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{screenshots/screen14.png}
+    \caption{Attempting to use deprecated mining commands in Geth console}
+    \label{fig:screen14}
+\end{figure}
 
 \noindent \textbf{Крок 13:} Проаналізуємо хоч конфігурацію та статус вузлів у мережі.
 
@@ -348,11 +416,26 @@ PoW і було зробило параметр terminalTotalDifficulty (TTD) к
     admin.nodeInfo.ports
 \end{code}
 
-Розділ \texttt{admin.nodeInfo.protocols.eth.config} відображає повну конфігурацію ланцюга, включаючи всі активовані 
-EIP  Ці дані підтверджують, що обидва вузли працюють з однаковою конфігурацією приватної мережі та успішно спілкуються 
-один з одним.
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{screenshots/screen15.png}
+        \caption{admin.nodeInfo with node \\ configuration and active protocols}
+        \label{fig:screen15}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{screenshots/screen16.png}
+        \caption{admin.nodeInfo.protocols with \\ chain configuration and active EIPs}
+        \label{fig:screen16}
+    \end{minipage}
+\end{figure}
 
-\textbf{Screenshot point \#15, 16:} Capture \texttt{admin.nodeInfo} showing the complete node and protocol configuration.
+Розділ \texttt{admin.nodeInfo.protocols.eth.config} відображає повну конфігурацію ланцюга, включаючи всі активовані 
+EIP. Ці дані підтверджують, що обидва вузли працюють з однаковою конфігурацією приватної мережі та успішно спілкуються 
+один з одним.
 
 % ---- PROBLEMS ----
 
