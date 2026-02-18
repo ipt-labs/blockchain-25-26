@@ -61,4 +61,6 @@
 \pgfplotsset{compat=1.18}
 
 \usepackage[backend=biber,style=numeric,sorting=none]{biblatex}
+\renewcommand*{\mkbibacro}[1]{#1}
+\DeclareFieldFormat{url}{\href{#1}{\mkbibacro{(URL)}}}
 \usepackage{csquotes}

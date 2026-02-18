@@ -1,0 +1,412 @@
+\section{Розгортання приватної мережі Ethereum на основі WSL}
+
+Потужності мого комп'ютера не є великими (16\,GB RAM, Windows 10, WSL v2.6.3), тому щоб спробувати відтворити блокчейн у себе локально, 
+я вирішив для практичної частини взяти мережу \textbf{Ethereum}. Та й загалом причин вибору саме цієї системи декілька:
+
+\begin{itemize}[nosep]
+    \item Geth, що працює на базі Linux, повністю сумісний з WSL 2.
+    \item Приватна мережа Ethereum вимагає мінімального дискового простору і може працювати з дуже низьким рівнем складності.
+    \item Ethereum надає найширший набір функцій для тестування: рахунки, власне майнінг, перекази та розгортання смарт-контрактів.
+    \item З 16 ГБ оперативної пам'яті система без проблем підтримує одночасну роботу декількох вузлів Geth.
+    \item Багато докладних статей~\cite{pathirana2019, pradeep2020}, тому розібратися саме з Ethereum буде набагато простіше, чим читати документацію інших систем))
+\end{itemize}
+
+\subsection{Налаштування середовища і встановлення Geth}
+
+\noindent \textbf{Крок 1:} Оновити (а в кого нема -- встановити) WSL та заінсталити усі необхідні залежності для роботи Geth.
+
+Відкриваємо термінал WSL і запускаємо:
+
+\begin{code}
+    # Install Ubuntu distribution for WSL
+    wsl --install -d Ubuntu
+
+    # Update package list and upgrade existing packages
+    sudo apt update && sudo apt upgrade -y
+
+    # Install required tools
+    sudo apt install -y software-properties-common build-essential curl wget
+\end{code}
+
+\textbf{Screenshot point \#1:} Capture the Ubuntu version output confirming successful installation.
+
+\noindent \textbf{Крок 2:} Встановлюємо Geth (Go-Ethereum)
+
+\begin{code}
+    # Add Ethereum PPA repository
+    sudo add-apt-repository -y ppa:ethereum/ethereum
+    sudo apt update
+
+    # Install Geth and related tools
+    sudo apt install -y ethereum
+
+    # Verify installation
+    geth version
+\end{code}
+
+P.S. Можна було і по-старічковому просто скачати бінарник з сайту:) \\ \url{https://geth.ethereum.org/downloads/}
+
+\textbf{Screenshot point \#2:} Capture the \texttt{geth version} output.
+
+\noindent \textbf{Крок 3:} Створюємо структуру робочої директорії для приватної мережі. Ми будемо запускати два вузли, тому створюємо 
+папки для кожного з них, а також папку для логів.
+
+\begin{code}
+    # Create project directory
+    mkdir -p ~/eth-private/{node1,node2,logs}
+    cd ~/eth-private
+\end{code}
+
+\subsection{Конфігурація Genesis Block-у}
+
+\noindent \textbf{Крок 4:} Створюємо genesis-файл [як потім вияволося спроба \No 1] для нашої приватної мережі.
+
+\begin{code}
+cat > genesis.json << 'EOF'
+{
+  "config": {
+    "chainId": 12345,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0,
+    "terminalTotalDifficulty": 0,
+    "terminalTotalDifficultyPassed": true
+  },
+  "alloc": {},
+  "coinbase": "0x0000000000000000000000000000000000000000",
+  "difficulty": "0x1",
+  "extraData": "0x00",
+  "gasLimit": "0x8000000",
+  "nonce": "0x0000000000000042",
+  "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "timestamp": "0x0"
+}
+EOF
+\end{code}
+
+\textbf{Screenshot point \#3:} Capture the contents of \texttt{genesis.json} showing the configuration parameters.
+
+\noindent \textbf{Крок 5:} Ініціалізуємо блокчейн для ноди 1.
+
+\begin{code}
+    geth --datadir ~/eth-private/node1 init ~/eth-private/genesis.json
+\end{code}
+
+Все як і очікували: "Successfully wrote genesis state."{}.
+
+\textbf{Screenshot point \#4:} Capture the initialization output confirming successful genesis state creation.
+
+\subsection{Запуск приватної мережі}
+
+\noindent \textbf{Крок 6:} Запускаємо ноду 1
+
+\begin{code}
+    geth --datadir ~/eth-private/node1 \
+    --networkid 12345 \
+    --http \
+    --http.port 8545 \
+    --http.api eth,net,web3,miner,admin \
+    --nodiscover \
+    --port 30303 \
+    console 2>> ~/eth-private/logs/node1.log
+\end{code}
+
+Щось наплутав з конфігурацією власного Geth ланцюга і Geth повідомляє що "цей ланцюг вже пройшов злиття"{}. Тож 
+перестворимо з чистого каталогу без попередньо існуючих даних ланцюжка і у dev mode.
+
+\subsection{Спроба 2: Використання dev mode для швидкого розгортання}
+
+Прапор \texttt{-{}-dev} Geth створює self-contained post-Merge development chain з pre-funded account і автоматичним 
+блокуванням блоків. Це непоганий спосіб тестування рахунків, транзакцій та смарт-контрактів на сучасних версіях Geth, 
+оскільки [як в процесі з'ясувалося] простір імен API \texttt{personal} та команди майнінгу PoW (\texttt{miner.start()}, \texttt{miner.setEtherbase()}) 
+були видалені з Geth 1.12+.
+
+\noindent \textbf{Крок 7:} Запускаємо ноду 1 у dev mode і подивимося її дані:
+
+\begin{code}
+    geth --datadir ~/eth-private/devnode \
+    --dev \
+    --http \
+    --http.port 8545 \
+    --http.api eth,net,web3,admin,debug \
+    --http.corsdomain "*" \
+    console 2>> ~/eth-private/logs/node1.log
+\end{code}
+
+Це відкриє нам консоль Geth JavaScript. Прапорець \texttt{-{}-dev} створює приватний ланцюжок з pre-funded рахунком 
+розробника і автоматично видобуває блоки при поданні транзакцій.
+
+\begin{code}
+    // List pre-funded account
+    eth.accounts
+
+    // Check balance (dev mode pre-funds with max Ether)
+    web3.fromWei(eth.getBalance(eth.accounts[0]), "ether")
+
+    // Current block number
+    eth.blockNumber
+\end{code}
+
+\textbf{Screenshot point \#5:} Capture the Geth console output showing the dev mode initialization and the 
+pre-funded account address. Capture the account address, balance, and block number in the Geth console.
+
+\noindent \textbf{Крок 8:} Створюємо другий рахунок для тестування транзакцій.
+
+\begin{code}
+    geth --datadir ~/eth-private/devnode account new
+    # Enter simple password (e.g., testpass123)
+\end{code}
+
+Повернемось до консолі Geth (перший термінал) і переконаймося, що обидва облікові записи відображаються:
+
+\begin{code}
+    eth.accounts
+\end{code}
+
+\textbf{Screenshot point \#6:} Capture the account creation output showing the new address and keystore file path. 
+Capture the account creation output (second terminal) and the \texttt{eth.accounts} listing showing both addresses.
+
+\noindent \textbf{Крок 9:} Створимо першу транзакцію.
+
+Переведемо трохи ефіру з "багатого"{} dev рахунку на новостворений рахунок і подивимося, чи блок створюється 
+автоматично та подивимося деталі транзакції.
+
+\begin{code}
+    // Send 5 Ether from dev account to second account
+    eth.sendTransaction({
+            from: eth.accounts[0],
+            to: eth.accounts[1],
+            value: web3.toWei(5, "ether")
+        })
+
+    // Dev mode auto-seals a block immediately
+    eth.blockNumber
+
+    // Verify recipient balance
+    web3.fromWei(eth.getBalance(eth.accounts[1]), "ether")
+\end{code}
+
+\textbf{Screenshot point \#7:} Capture the transaction hash, block number increment, and recipient balance of 5~ETH.
+
+\noindent \textbf{Крок 10:} Подивимося деталі блоку та самої транзакції:
+
+\begin{code}
+    // Full block information
+    eth.getBlock(1)
+
+    // Transaction receipt (gas used, status, etc.)
+    eth.getTransactionReceipt("0xTX_HASH_HERE")
+\end{code}
+
+Оскільки у нас тестова мережа, то маємо автоматичне підтвердження блоків у момент відправлення транзакції -- у 
+реальній мережі нам довелося б чекати, поки валідатор включить її (+- 12 блоків, або 2-3 хв).
+
+\textbf{Screenshot point \#8:} Capture \texttt{eth.getBlock(1)} output showing the block structure.
+
+Тут вже можна поглянути на деталі транзакції і самого блоку, куди вона була включена. 
+\begin{itemize}[nosep]
+    \item \texttt{difficulty: 0} -- підтверджує, що це post-Merge PoS chain;
+    \item \texttt{gasUsed: 21000} -- це стандартна вартість простого переказу ETH. Кожна транзакція Ethereum має 
+        базову вартість 21 000 gas. Взаємодії зі смарт-контрактами коштують дорожче, оскільки EVM повинен виконувати 
+        код на додаток до цієї базової вартості.
+    \item \texttt{status: "0x1"{}} -- означає, що транзакція була успішною (0x0 означало б невдачу).
+    \item \texttt{miner} -- показує на мій dev запис розробника. У PoS це фактично "одержувач комісії"{}, який збирає чайові.
+\end{itemize}
+
+\subsection{Спроба 3: Розгортання двох нод у приватній мережі для демонстрації P2P мережі}
+
+Відкриємо Geth на другому терміналі (де ми створювали другий акаунт) і створимо другу ноду для peer з'єднання. Це 
+демонструватиме peer-to-peer networking з нашого, описаного в пункті 4, прикладі.
+
+\textbf{Screenshot point \#9:} Capture the second terminal showing the initialization of the second node with the same genesis file.
+
+Адреса enode закінчується на :0 замість :30303, а це означає, що Node 1 не шейрить свій порт прослуховування 
+правильно, оскільки режим --dev все ж розроблений як одновузлове середовище. І як я одразу про це не прочитав? 
+Ну ладно, доведеться закривати ноду 1 і спробувати перестворити, використавши --dev admin API mode для ручного підключення вузлів. 
+Порт показує :0 у рядку enode, але вузли все одно можуть підключатися, якщо ми використовуємо шлях IPC (Inter-Process Communication) безпосередньо. Спершу перевіримо фактичний стан прослуховування мережі:
+
+\textbf{Screenshot point \#10:} Capture the output of \texttt{net.listening} and \texttt{net.peerCount} in the Geth console.
+
+net.listening є істинним, але обидва порти мають значення 0. Це підтверджує, що режим --dev приймає ідею мережевого зв'язку, 
+але фактично не відкриває жодних портів для з’єднання. Це можна назвати дверима з написом «відкрито», але без ручки, хах. 
+Ну що ж, dev не працює, то доведеться робить кастомну приватну мережа з двома відповідними вузлами, щоб продемонструвати P2P-мережі 
+та синхронізацію блоків.
+
+\noindent \textbf{Крок 11:} Перестворимо структуру genesis block для приватної мережі і ініціалізуємо обидві ноди:
+
+Перестворимо genesis block, задавши високий поріг \texttt{terminalTotalDifficulty}, який задовольняє вимогу Geth 1.12.x 
+після злиття, зберігаючи ланцюг у стані, схожому на стан до злиття. В новіших версіях (після 1.12.x) поле terminalTotalDifficulty 
+є невід'ємною складовою генезис-блоку. Розробники повністю відмовилися у підтримці ланцюгів, що працюють на 
+PoW і було зробило параметр terminalTotalDifficulty (TTD) критично важливим для ініціалізації або оновлення ланцюгів та 
+перейшли на протокол Proof-of-Stake (PoS).
+
+\begin{code}
+    cat > ~/eth-private/genesis-pow.json << 'EOF'
+    {
+    "config": {
+    "chainId": 54321,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0,
+    "terminalTotalDifficulty": 999999999999
+    },
+    "alloc": {},
+    "coinbase": "0x0000000000000000000000000000000000000000",
+    "difficulty": "0x400",
+    "extraData": "0x00",
+    "gasLimit": "0x8000000",
+    "nonce": "0x0000000000000042",
+    "mixhash": "0x00000000000000000000000000000000
+    00000000000000000000000000000000",
+    "parentHash": "0x0000000000000000000000000000000
+    00000000000000000000000000000000000",
+    "timestamp": "0x0"
+    }
+    EOF
+\end{code}
+
+Значення 999999999999 \texttt{terminalTotalDifficulty} ланцюг ніколи не досягне шляхом майнінгу, ефективно 
+утримуватиме його в режимі до злиття, одночасно задовольняючи обов'язкові вимоги до конфігурації Geth.
+
+\textbf{Screenshot point \#11:} Capture the contents of \texttt{genesis-pow.json} showing the new configuration parameters, especially the high \texttt{terminalTotalDifficulty}.
+
+\begin{code}
+    geth --datadir ~/eth-private/pow-node1 \
+    init ~/eth-private/genesis-pow.json
+    geth --datadir ~/eth-private/pow-node2 \
+    init ~/eth-private/genesis-pow.json
+\end{code}
+
+\textbf{Screenshot point \#12:} Capture the initialization output from both nodes showing "Successfully wrote genesis state" with matching genesis hashes.
+
+Обидва вузли ініціалізовані однаковим гешем генезис блоку. Це є надзвичайно важливим, оскільки вузли можуть з'єднуватися 
+лише за умови, що вони мають однаковий блок генезису.
+
+\noindent \textbf{Крок 12:} Підключаємо вузли один до одного для формування приватної мережі та перевіряємо зв’язок.
+
+В \textbf{терміналі 1} (консолі Node~1), з'ясовуємо enode URL:
+
+\begin{code}
+    admin.nodeInfo.enode
+\end{code}
+
+Копіюємо цей рядок enode. У \textbf{терміналі 2} (консолі Node~2) додаємо Node~1 як рівноправного партнера:
+
+\begin{code}
+    admin.addPeer("enode://04b6a2...@127.0.0.1:30303")
+
+    // Verify connection
+    net.peerCount
+
+    admin.peers
+\end{code}
+
+\textbf{Screenshot point \#13:} Capture the enode URL from Node~1 and the output of \texttt{admin.addPeer()} in Node~2 showing a successful connection.
+
+Вихідні дані \texttt{admin.peers} містять важливу інформацію про нашу мережу:
+\begin{itemize}[nosep]
+    \item \texttt{caps: ["eth/68", "eth/69", "snap/1"]} --- підтримувані версії протоколу.
+    \item \texttt{inbound: false} на Node~2 означає, що він ініціював з'єднання; Node~1 показує \texttt{inbound: true} (отримав з'єднання).
+    \item Обидва вузли комунікують за допомогою протоколу Ethereum wire (\texttt{eth}) та протоколу синхронізації знімків (\texttt{snap}).
+\end{itemize}
+
+\noindent В вересні 2022 року з переходом PoW на PoS процес майнінгу (mining API) ефіру (ETH) було припинено. Тому, на жаль, не 
+вийде показати цей процес з подальшою синхронізацією нового блоку на всі ноди навіть у тестовій мережі.
+
+\textbf{Screenshot point \#14:} Capture unsuccessful attempts to use mining commands in the Geth console, confirming their deprecation in post-Merge versions.
+
+\noindent \textbf{Крок 13:} Проаналізуємо хоч конфігурацію та статус вузлів у мережі.
+
+\begin{code}
+    // Full node information
+    admin.nodeInfo
+
+    // Protocol configuration
+    admin.nodeInfo.protocols
+    // Shows chainId, terminalTotalDifficulty, genesis hash
+
+    // Network ID
+    net.version
+
+    // Listening status and ports
+    net.listening
+    admin.nodeInfo.ports
+\end{code}
+
+Розділ \texttt{admin.nodeInfo.protocols.eth.config} відображає повну конфігурацію ланцюга, включаючи всі активовані 
+EIP  Ці дані підтверджують, що обидва вузли працюють з однаковою конфігурацією приватної мережі та успішно спілкуються 
+один з одним.
+
+\textbf{Screenshot point \#15, 16:} Capture \texttt{admin.nodeInfo} showing the complete node and protocol configuration.
+
+% ---- PROBLEMS ----
+
+\subsection{Проблеми та їх рішення}
+\label{sec:problems}
+
+У процес розгортання блокчейну, я виявив кілька істотних відмінностей між інструкціями знайденими в онлайн-підручниках (більшість з яких написані для Geth~1.9--1.13, 2019-20~р.) та реальністю роботи Geth~1.16.9. 
+Проблеми та їхні рішення зібрав у табличку.
+
+\begin{table}[H]
+\centering
+\begin{tblr}{
+        colspec = {X[0.4,c] X[2.5,l] X[2,l] X[2.5,l]},
+        hlines, vlines,
+        row{1} = {bg=ethpurple!20, font=\bfseries},
+        rows = {m},
+        cells = {font=\footnotesize},
+    }
+    \No & Problem                                                                             & Cause                                                                                           & Solution                                                                               \\
+    1   & Fatal: \texttt{'terminalTotalDifficulty'} не встановлено в genesis-блоці            & Geth 1.13.x потребує конфігурації після Merge; файли старого зразка без цього поля відхиляються & Додали \texttt{'terminalTotalDifficulty'} до конфігурації genesis                      \\
+    2   & \texttt{miner.setEtherbase()} та \texttt{miner.start()} відсутні                    & Geth 1.16.x видалив команди PoW-майнінгу після переходу Ethereum на PoS                         & Використав режим \texttt{--dev} для транзакцій (автоматичне запечатування блоків)      \\
+    3   & Dev-режим повідомляє про P2P нульові порти і не дає з'єднатися                      & Режим \texttt{--dev} навмисно вимикає P2P мережу                                                & Використав окрему кастомну мережу для демонстрації P2P                                 \\
+    4   & Genesis без \texttt{'terminalTotalDifficulty'} відхиляється навіть для PoW ланцюгів & Geth 1.16.x вимагає конфігурацію post-Merge для всіх ланцюгів                                   & Встанив \texttt{'terminalTotalDifficulty'} на недосяжно високе значення (999999999999) \\
+\end{tblr}
+\caption{Проблеми, що виникли під час розгортання, та їх вирішення}
+\label{tab:problems}
+\end{table}
+
+Ці питання ілюструють важливу практичну реальність: перехід Ethereum від Proof-of-Work до Proof-of-Stake (в оновленні «The Merge», вересень 2022 року) 
+кардинально змінив робочий процес розгортання. Більшість онлайн-посібників були написані для версій Geth до Merge і зараз частково або повністю застаріли/змінилися 
+(конкретні команди, параметри конфігурації ), але основні концепції залишаються актуальними (блоки генезису, виявлення однорангових вузлів, URL-адреси enode, 
+консоль JavaScript).
+
+\section{Висновки}
+
+Провівши порівняльний аналіз п'яти основних блокчейн-систем, таких як Ethereum, Bitcoin, Dash, NEO та Litecoin можу підбити 
+такі важливі висновки щодо розгортання та взаємозамінності модулів:
+\begin{enumerate}
+    \item \textbf{Архітектура визначає сумісність.} Системи, що мають спільного предка по кодовій базі (Bitcoin $\to$ Litecoin, 
+        Bitcoin $\to$ Dash), демонструють найвищий ступінь структурної схожості та потенціал для повторного використання модулів. 
+        Ethereum і NEO, незважаючи на те, що обидві підтримують смарт-контракти, мають фундаментально несумісні архітектури.
+    \item \textbf{Консенсус є найменш портативним модулем.} Механізм консенсусу кожної системи тісно пов'язаний з її форматом блоків, 
+        логікою переходу між станами та мережевим протоколом. Заміна одного механізму консенсусу на інший вимагає фактично перепроектування 
+        всієї системи.
+    \item \textbf{Сховище є найбільш портативним модулем.} Використання загальних сховищ ключ-значення (LevelDB, RocksDB) у всіх системах 
+        означає, що бекенд сховища можна замінити з мінімальним впливом на поведінку протоколу.
+    \item \textbf{Модель стану створює фундаментальний розрив.} Account-based cистеми (Ethereum, NEO) та системи на основі UTXO 
+        (Bitcoin, Litecoin, Dash) обробляють транзакції принципово різними способами, що робить сумісність модулів між моделями 
+        непрактичним.
+    \item \textbf{Приватні мережі Ethereum} є найбільш практичним вибором для освітнього впровадження, пропонуючи багату функціональність 
+        (рахунки, транзакції, майнінг(в минулому), смарт-контракти, однорангові мережі) з помірними вимогами до апаратного забезпечення.
+\end{enumerate}
+
+\newpage
+\selectlanguage{english}
+\nocite{*}
+\printbibliography
