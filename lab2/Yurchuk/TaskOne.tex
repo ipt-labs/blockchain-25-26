@@ -6,7 +6,7 @@
 розгорну його в тестовій мережі Sepolia та спробую покращити його газову ефективність. А потім ще спробую накняпати ще контракт 
 власними силами (а-ля завдання 2).
 
-На \href{https://docs.soliditylang.org/en/v0.5.3/solidity-by-example.html}{сайті Solidity} наведено такі приклади контрактів:
+На \href{https://docs.soliditylang.org/en/v0.5.3/solidity-by-example.html}{сайті Solidity}~\cite{solidity-docs} наведено такі приклади контрактів:
 
 \begin{enumerate}[label=\arabic*.]
     \item \textbf{Voting (Ballot)} --- система делегованого голосування з контролем доступу.
@@ -16,7 +16,7 @@
 \end{enumerate}
 
 Зупинюся я на контракті \textbf{Ballot (Voting)} (Голосування), оскільки він демонструє найширший спектр можливостей 
-мови Solidity -- структури, відображення, контроль доступу, логіку делегування та функції перегляду, і при цьому не вимагає 
+мови Solidity~\cite{solidity-lang} -- структури, відображення, контроль доступу, логіку делегування та функції перегляду, і при цьому не вимагає 
 переказів Ether, що спрощує тестування. Крім того, його механізм делегування містить чітку можливість оптимізації газу 
 (необмежений цикл \texttt{while}).
 
@@ -52,7 +52,7 @@
 
 Стан контракту зберігається в постійній пам'яті (\emph{storage slots}), кожен з яких має ширину 256 біт. Запис у новий слот коштує 20000~gas (\texttt{SSTORE}); 
 оновлення існуючого слота коштуватиме 5 000 газу; читання коштує 2 100 газу (\texttt{SLOAD}). Пам'ять (тимчасова, для кожного виклику) і дані 
-виклику (тільки для читання, для аргументів функції) значно дешевші.
+виклику (тільки для читання, для аргументів функції) значно дешевші~\cite{solidity-gas}.
 
 Кожен виконуваний EVM код має фіксовану газову вартість. Відправник транзакції вказує \emph{gas limit}, а також сплачує $\text{gas used} \times \text{gas price}$ в ETH. 
 Якщо газ закінчується в процесі виконання, всі зміни стану скасовуються, і (що важливо!) спожитий газ на рахунок \emph{не} повертається. 
@@ -574,3 +574,118 @@ $\sim$47\,000 (запис нового слота пам'яті).
 \end{figure}
 
 Найбільш істотна економія гасу вже відчувається при наданні прав голосування 10 виборцям в рамках однієї пакетної транзакції.
+
+\section{Розгортання контракту via Remix IDE}
+\label{sec:deploy}
+
+\subsection{Попередня підготовка}
+
+\begin{itemize}
+    \item Встановити та налаштовати розширення браузера MetaMask.
+    \item Підключити MetaMask до тестової мережі \textbf{Sepolia}.
+    \item Накопичити трохи SepoliaETH у гаманці, наприклад з крану \href{https://cloud.google.com/application/web3/faucet/ethereum/sepolia}{CloudGoogle}.
+    \item Залогінитися на Remix~\cite{remix-ide} і SepoliaEtherscan~\cite{sepolia-etherscan}.
+\end{itemize}
+
+\subsection{Інструкція з деплойменту}
+
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=2em]
+    \item \textbf{Open Remix IDE} at \url{https://remix.ethereum.org}.
+    \item \textbf{Create the contract file.} В панельці зліва (File Explorer), у папці contracts створюємо новий файл з 
+    назвою: \texttt{BallotOptimized.sol}. Копіпастимо оптимізований код контракту з розділу~\ref{sec:gasopt}.
+    \item \textbf{Configure the compiler.} Переходимо на вкладку "Solidity Compiler"{} (третя піктограма в лівій бічній панелі). 
+        Встановлюємо версію компілятора \texttt{0.8.21} (або будь-яку сумісну версію 0.8.x). Також ставимо галочку 
+        біля \emph{Enable optimization} і вводимо кількість запусків --- \texttt{200}. Натисніть \textbf{Compile BallotOptimized.sol}. 
+        Очікуємо на зелену галочку.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.85\textwidth]{screenshots/screen1.png}
+        \caption{Remix IDE: Compiler settings for BallotOptimized.sol.}
+        \label{fig:screen1}
+    \end{figure}
+    \item \textbf{Connect MetaMask.} Змінюємо вкладинку на Deploy \& Run Transactions.  У розділі \textbf{Environment} 
+        вибираємо \texttt{WalletConnect MetaMask}. Підтверджуємо зв'язок. Перевіряємо, що в MetaMask вибрана Sepolia, а адреса нашого 
+            облікового запису відображається в Remix.
+    \item \textbf{Prepare constructor arguments.} Конструктор очікує від нас \texttt{bytes32[]} --- масив імен пропозицій, закодованих у 
+        вигляді 32-байтових шістнадцяткових рядків. Підготуйте їх за допомогою консолі Remix або вручну:
+        \begin{code}
+            // In Remix console (bottom panel):
+            web3.utils.asciiToHex("OptionA")
+            // Result: 0x4f7074696f6e41000000...00
+            // Deploy input field format:
+            ["0x4f7074696f6e4100...", "0x4f7074696f6e4200...",
+            "0x4f7074696f6e4300..."]
+        \end{code}
+    \item \textbf{Deploy.} Вставляємо масив \texttt{bytes32[]} у поле введення і тиснемо кнопку "transact". 
+        Підтверджуємо транзакцію в MetaMask. Чекаємо 15-30 секунд, поки Sepolia вибудує блок з нашим контрактом.
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.7\textwidth]{screenshots/screen2.png}
+            \caption{MetaMask transaction confirmation.}
+            \label{fig:screen2}
+        \end{figure}
+    \item \textbf{Interact with the contract.} Розгорнутий контракт з'являється в розділі "Deployed Contracts"{} внизу, на тій же панелі. 
+        Потестимо наступні функції:
+        \begin{enumerate}[label=\alph*), leftmargin=1.5em]
+            \item Тиснемо \texttt{chairperson} --- з'являєтсья наша адреса, з якої деплоїли контракт.
+            \item Викликаємо \texttt{giveRightToVote} з адресою другого облікового запису MetaMask.
+            \item Перемикаємо обліковий запис, і викликаємо \texttt{vote(0)}.
+            \item Викликаємо \texttt{winnerName()} --- і бачимо, що повертається \texttt{bytes32} наш "OptionA"{}.
+        \end{enumerate}
+        \begin{figure}[H]
+            \centering
+            \begin{minipage}{0.45\textwidth}
+                \centering
+                \includegraphics[width=\textwidth]{screenshots/screen3.png}
+                \caption{Deployed contract panel with function results.}
+                \label{fig:screen3}
+            \end{minipage}
+            \hfill
+            \begin{minipage}{0.5\textwidth}
+                \centering
+                \includegraphics[width=\textwidth]{screenshots/screen4.png}
+                \caption{Second account providing voting rights and casting a vote.}
+                \label{fig:screen4}
+            \end{minipage}
+        \end{figure}
+    \item \textbf{Verify on Etherscan.} Переглянемо наш контакт і виконані (оранжеві) транзакції на Etherscan: \\ 
+        \texttt{https://sepolia.etherscan.io/address/<CONTRACT\_ADDRESS>}.\\
+        Тут можемо спостерігати всі транзакції, включаючи розгортання та виклики функцій. Клікнувши на кожну транзакцію, ми 
+        можемо побачити деталі, включаючи витрати газу.
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen5.png}
+            \caption{Etherscan transaction list for the deployed BallotOptimized contract.}
+            \label{fig:screen5}
+        \end{figure}
+\end{enumerate}
+
+Для зручності, ось ще таблиця з прикладами застосованих імен пропозицій та їх \texttt{bytes32} представленнями:
+
+\begin{tblr}{
+    colspec = {Q[l, m, 70pt]Q[l, m, font=\footnotesize\ttfamily]},
+    row{1} = {font=\bfseries\small, bg=gray!15, c},
+    hlines, vlines,
+    width = \textwidth,
+    measure = vbox,
+}
+    Proposal Name & {bytes32 Hex Value} \\
+    OptionA & 0x4f7074696f6e4100000000000000000000000000000000000000000000000000 \\
+    OptionB & 0x4f7074696f6e4200000000000000000000000000000000000000000000000000 \\
+    OptionC & 0x4f7074696f6e4300000000000000000000000000000000000000000000000000 \\
+\end{tblr}
+
+\section{Висновки для завдання~1}
+
+В цій частині я:
+\begin{enumerate}
+    \item Розглянув, як працюють смарт-контракти Ethereum на загальному рівні (життєвий цикл, модель зберігання, механізм використання 
+        газу).
+    \item Обрав контракт \textbf{Ballot (Voting)} з документації Solidity 0.5.3 як найбільш suitable приклад для цієї 
+        лабораторної роботи та розглянув детально, проаналізувавши його структури даних, змінні станів та функції.
+    \item Разом з ШІ (куди без нього) зробили оптимізовану версію (\texttt{BallotOptimized.sol}) з 8 моментами покращення в економії газу: 
+        включаючи batch реєстрацію виборців, \texttt{external} видимість, \texttt{unchecked} арифметику, обмеження ланцюжка делегування та 
+        оптимізацію циклів.
+    \item Розгорнув оптимізований контракт у тестовій мережі Sepolia за допомогою Remix IDE та MetaMask і повчився розгортати контракт, 
+    а також взаємодіяти з ним, перевіряючи транзакції на Sepolia Etherscan.
+\end{enumerate}
