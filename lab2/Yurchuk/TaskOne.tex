@@ -48,14 +48,14 @@
         операційного коду \texttt{selfdestruct} (застарілого в сучасній Solidity) або шляхом впровадження шаблону паузи/знищення.
 \end{enumerate}
 
-\subsection{Стан, гас і вартість контрактів (EVM Storage and Gas)}
+\subsection{Стан, газ і вартість контрактів (EVM Storage and Gas)}
 
 Стан контракту зберігається в постійній пам'яті (\emph{storage slots}), кожен з яких має ширину 256 біт. Запис у новий слот коштує 20000~gas (\texttt{SSTORE}); 
-оновлення існуючого слота коштуватиме 5 000 гасу; читання коштує 2 100 гасу (\texttt{SLOAD}). Пам'ять (тимчасова, для кожного виклику) і дані 
+оновлення існуючого слота коштуватиме 5 000 газу; читання коштує 2 100 газу (\texttt{SLOAD}). Пам'ять (тимчасова, для кожного виклику) і дані 
 виклику (тільки для читання, для аргументів функції) значно дешевші.
 
-Кожен виконуваний EVM код має фіксовану гасову вартість. Відправник транзакції вказує \emph{gas limit}, а також сплачує $\text{gas used} \times \text{gas price}$ в ETH. 
-Якщо гас закінчується в процесі виконання, всі зміни стану скасовуються, і (що важливо!) спожитий гас на рахунок \emph{не} повертається. 
+Кожен виконуваний EVM код має фіксовану газову вартість. Відправник транзакції вказує \emph{gas limit}, а також сплачує $\text{gas used} \times \text{gas price}$ в ETH. 
+Якщо газ закінчується в процесі виконання, всі зміни стану скасовуються, і (що важливо!) спожитий газ на рахунок \emph{не} повертається. 
 Цей механізм запобігає нескінченним циклам і стимулює писати ефективний код.
 
 \subsection{Події (Events)}
@@ -192,7 +192,7 @@
 \end{minted}
 
 Конструктор виконується \emph{exactly once} під час розгортання контракту. Він записує \texttt{msg.sender} як головуючого, автоматично надає йому 
-вагу голосу ~1 і заповнює масив \texttt{proposals} з наданих йому імен. Вартість гасу для розгортання пропорційна 
+вагу голосу ~1 і заповнює масив \texttt{proposals} з наданих йому імен. Вартість газу для розгортання пропорційна 
 кількості пропозицій (кожен \texttt{push} записує новий слот пам'яті).
 
 \subsection{Функція: \texttt{giveRightToVote(address voter)}}
@@ -215,10 +215,10 @@
     \item Ціль не повинна ще мати права голосу (\texttt{weight == 0}).
 \end{enumerate}
 
-У разі успіху вага виборця встановлюється на ~1, що дозволяє йому брати участь у голосування. Приблизна вартість гасу складає: 
+У разі успіху вага виборця встановлюється на ~1, що дозволяє йому брати участь у голосування. Приблизна вартість газу складає: 
 $\sim$47\,000 (запис нового слота пам'яті).
 
-\textbf{Обмеження:} Кожен виборець потребує окремої транзакції. Для $N$ виборців головуючий сплачує $N \times (\sim\!47\,000 + 21\,000_{\text{base}})$ гасу. 
+\textbf{Обмеження:} Кожен виборець потребує окремої транзакції. Для $N$ виборців головуючий сплачує $N \times (\sim\!47\,000 + 21\,000_{\text{base}})$ газу. 
 У самій документації Solidity розробники ставлять нам питання: \emph{"Чи можете ви придумати кращий спосіб?"{}} -- на це питання я дам в розділі з оптимізацією.
 
 \subsection{Функція: \texttt{delegate(address to)}}
@@ -262,9 +262,9 @@ $\sim$47\,000 (запис нового слота пам'яті).
     \end{itemize}
 \end{enumerate}
 
-\noindent \textbf{Гасові ризики:} Цикл \texttt{while} зчитує storage, сплачуючи (\texttt{SLOAD} = 2\,100~gas) на кожній ітерації. 
+\noindent \textbf{газові ризики:} Цикл \texttt{while} зчитує storage, сплачуючи (\texttt{SLOAD} = 2\,100~gas) на кожній ітерації. 
 Ланцюжок делегування довжиною $k$ коштує приблизно $k \times 2\,100$~gas лише за один цикл. Чим довше ланцюжок, тим 
-більша ймовірність вичерпати гасовий ліміт блоку.
+більша ймовірність вичерпати газовий ліміт блоку.
 
 \subsection{Функція: \texttt{vote(uint proposal)}}
 
@@ -282,7 +282,7 @@ $\sim$47\,000 (запис нового слота пам'яті).
 
 Все доволі просто: позначити виборця як проголосовавшого, записати його вибір і додати його вагу до підрахунку обраної пропозиції. 
 Якщо індекс \texttt{proposal} виходить за межі масиву, Solidity автоматично викликає \texttt{revert}, скасовуючи всі зміни стану. 
-Вартість по гасу: $\sim$47\,000--65\,000 залежно від того, чи слоти пам'яті є новими або вже записаними.
+Вартість по газу: $\sim$47\,000--65\,000 залежно від того, чи слоти пам'яті є новими або вже записаними.
 
 \subsection{Функції перегляду: \texttt{winningProposal()} and \texttt{winnerName()}}
 
@@ -306,7 +306,7 @@ $\sim$47\,000 (запис нового слота пам'яті).
     }
 \end{minted}
 
-Обидві функції є типу \texttt{view}. Це означає, що вони не змінюють стан і \emph{free to call} (без транзакції, без витрати гасу) 
+Обидві функції є типу \texttt{view}. Це означає, що вони не змінюють стан і \emph{free to call} (без транзакції, без витрати газу) 
 ззовні. Функція \texttt{winningProposal()} ітерує по всіх пропозиціях та повертає індекс тієї, яка має найбільшу кількість 
 голосів (\texttt{voteCount}). Функція \texttt{winnerName()} викликає вищезгадану для отримання індексу переможця, а потім просто 
 повертає його ім'я.
@@ -356,3 +356,221 @@ $\sim$47\,000 (запис нового слота пам'яті).
     \caption{Interaction roles in the Ballot contract.}
     \label{fig:interaction}
 \end{figure}
+
+\section{Оптимізація газу}
+\label{sec:gasopt}
+
+Оригінальний контракт Ballot, з навчальної точки зору ж достатньо зрозумілим, проте все ж містить кілька можливостей 
+для скорочення витрат газу.
+
+\subsection{Оптимізований контракт: \texttt{BallotOptimized.sol}}
+
+\begin{minted}{solidity}
+    // SPDX-License-Identifier: GPL-3.0
+    pragma solidity >=0.7.0 <0.9.0;
+
+    /// @title Optimized Voting with delegation
+    contract BallotOptimized {
+
+        struct Voter {
+            uint weight;
+            bool voted;
+            address delegate;
+            uint vote;
+        }
+
+        struct Proposal {
+            bytes32 name;
+            uint voteCount;
+        }
+
+        address public chairperson;
+        mapping(address => Voter) public voters;
+        Proposal[] public proposals;
+
+        // OPT-1: Events for off-chain tracking (cheaper than storage)
+        event VoterAuthorized(address voter);
+        event VoteCast(address voter, uint proposal);
+        event VoteDelegated(address from, address to);
+
+        constructor(bytes32[] memory proposalNames) {
+            chairperson = msg.sender;
+            voters[chairperson].weight = 1;
+
+            for (uint i = 0; i < proposalNames.length; i++) {
+                proposals.push(Proposal({
+                    name: proposalNames[i],
+                    voteCount: 0
+                }));
+            }
+        }
+
+        // OPT-2: external instead of public
+        function giveRightToVote(address voter) external {
+            require(
+                msg.sender == chairperson,
+                "Only chairperson can give right to vote."
+            );
+            require(!voters[voter].voted, "The voter already voted.");
+            require(voters[voter].weight == 0);
+            voters[voter].weight = 1;
+            emit VoterAuthorized(voter);
+        }
+
+        // OPT-3: Batch granting of rights
+        function giveRightToVoteBatch(address[] calldata voterList)
+            external
+        {
+            require(msg.sender == chairperson, "Only chairperson.");
+            for (uint i = 0; i < voterList.length; i++) {
+                address v = voterList[i];
+                if (!voters[v].voted && voters[v].weight == 0) {
+                    voters[v].weight = 1;
+                    emit VoterAuthorized(v);
+                }
+            }
+        }
+
+        function delegate(address to) external {
+            Voter storage sender = voters[msg.sender];
+            require(!sender.voted, "You already voted.");
+            require(to != msg.sender, "Self-delegation is disallowed.");
+
+            // OPT-4: Limit chain depth to prevent gas blowup
+            uint chainLength = 0;
+            address current = to;
+            while (voters[current].delegate != address(0)) {
+                current = voters[current].delegate;
+                require(
+                    current != msg.sender,
+                    "Found loop in delegation."
+                );
+                chainLength++;
+                require(chainLength <= 10, "Delegation chain too long");
+            }
+
+            sender.voted = true;
+            // OPT-5: Point directly to chain end
+            sender.delegate = current;
+            Voter storage delegate_ = voters[current];
+
+            if (delegate_.voted) {
+                // OPT-6: unchecked arithmetic
+                unchecked {
+                    proposals[delegate_.vote].voteCount += sender.weight;
+                }
+            } else {
+                unchecked {
+                    delegate_.weight += sender.weight;
+                }
+            }
+            emit VoteDelegated(msg.sender, current);
+        }
+
+        function vote(uint proposal) external {
+            Voter storage sender = voters[msg.sender];
+            require(sender.weight != 0, "Has no right to vote");
+            require(!sender.voted, "Already voted.");
+
+            sender.voted = true;
+            sender.vote = proposal;
+
+            unchecked {
+                proposals[proposal].voteCount += sender.weight;
+            }
+            emit VoteCast(msg.sender, proposal);
+        }
+
+        function winningProposal() public view
+            returns (uint winningProposal_)
+        {
+            uint winningVoteCount = 0;
+            // OPT-7: Cache array length in memory
+            uint len = proposals.length;
+            for (uint p = 0; p < len;) {
+                if (proposals[p].voteCount > winningVoteCount) {
+                    winningVoteCount = proposals[p].voteCount;
+                    winningProposal_ = p;
+                }
+                // OPT-8: Unchecked loop increment
+                unchecked { p++; }
+            }
+        }
+
+        function winnerName() external view
+            returns (bytes32 winnerName_)
+        {
+            winnerName_ = proposals[winningProposal()].name;
+        }
+    }
+\end{minted}
+
+\subsection{Підсумки оптимізації}
+
+\begin{tblr}{
+    colspec = {Q[l, m]X[l, m]X[l, m]X[l, m]},
+    row{1} = {font=\bfseries, bg=gray!15, c},
+    hlines, vlines,
+    width = \textwidth,
+    }
+    \No & Оптимізація                               & Заощадження (гасу)            & Пояснення                                                                                                                     \\
+    1   & Події замість додаткового зберігання      & $\sim$15\,000/подія           & Логи коштують $\sim$375 + 375$\times$topics + 8/байт; в т.ч. як \texttt{SSTORE} коштує 20\,000 для нового слота.              \\
+    2   & \texttt{external} замість \texttt{public} & $\sim$200--600/виклик         & Зовнішні функції читають аргументи з \texttt{calldata} напряму; в т.ч. як публічні копіюють їх в \texttt{memory}, що дорожче. \\
+    3   & Batch \texttt{giveRightToVote}            & $\sim$21\,000/виборець        & Базова вартість однієї транзакції (21\,000~gas) розділена між $N$ виборцями замість $N$ окремих транзакцій.                   \\
+    4   & Ліміт глибини ланцюга делегування (10)    & Запобігає DoS атакам          & Вихідний контракт міг вичерпати ліміт газу блоку на зловмисно довгих ланцюгах.                                                \\
+    5   & Пряме делегування до кінця ланцюга        & Зберігає майбутні проходження & Якщо A$\to$B$\to$C, то зберігає A.delegate = C напряму.                                                                       \\
+    6   & \texttt{unchecked} арифметика             & $\sim$30--60/операція         & Вага та кількість голосів не можуть переповнити \texttt{uint256} в реальних умовах; skip перевірок економить газ.          \\
+    7   & Кешування \texttt{proposals.length}       & $\sim$100/ітерація            & Уникає повторного \texttt{SLOAD} для слота довжини в масив.                                                                    \\
+    8   & Безконтрольне збільшення циклу            & $\sim$30/ітерація             & Індекс циклу не може переповнитися в реальних умовах, тому можна пропустити перевірку на переповнення.                        \\
+\end{tblr}
+
+\subsection{Порівняння газових витрат}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            ybar,
+            bar width=18pt,
+            width=0.85\textwidth,
+            height=8cm,
+            ylabel={Gas (units)},
+            symbolic x coords={
+                {deploy (3~prop.)},
+                {giveRight ($\times$1)},
+                {giveRight ($\times$10)},
+                {delegate},
+                {vote}
+            },
+            xtick=data,
+            x tick label style={rotate=25, anchor=east, font=\small},
+            ymin=0,
+            legend style={at={(0.5,-0.35)}, anchor=north, legend columns=2},
+            nodes near coords,
+            nodes near coords style={font=\tiny, rotate=90, anchor=west},
+            every axis plot/.append style={fill opacity=0.85},
+        ]
+            % Original (approximate values)
+            \addplot[fill=red!40] coordinates {
+                ({deploy (3~prop.)}, 580000)
+                ({giveRight ($\times$1)}, 68000)
+                ({giveRight ($\times$10)}, 680000)
+                ({delegate}, 72000)
+                ({vote}, 65000)
+            };
+            % Optimised (approximate values)
+            \addplot[fill=blue!40] coordinates {
+                ({deploy (3~prop.)}, 560000)
+                ({giveRight ($\times$1)}, 47200)
+                ({giveRight ($\times$10)}, 283000)
+                ({delegate}, 68000)
+                ({vote}, 46500)
+            };
+            \legend{Original Ballot, BallotOptimized}
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Approximate gas costs: original vs. optimised Ballot contract.}
+    \label{fig:gas}
+\end{figure}
+
+Найбільш істотна економія гасу вже відчувається при наданні прав голосування 10 виборцям в рамках однієї пакетної транзакції.
