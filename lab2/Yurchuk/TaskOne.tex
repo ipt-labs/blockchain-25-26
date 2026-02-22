@@ -1,0 +1,358 @@
+\section{Вступ}
+\label{sec:intro}
+
+За мету в цій лабораторній роботі я ставив собі попрацювати і набути практичних навичок зі смарт-контрактами Ethereum 
+(у продовження першої лаби). У Завданні 1 я візьму один з еталонних контрактів з офіційної документації Solidity (версія~0.5.3, «Solidity by Example»), 
+розгорну його в тестовій мережі Sepolia та спробую покращити його газову ефективність. А потім ще спробую накняпати ще контракт 
+власними силами (а-ля завдання 2).
+
+На \href{https://docs.soliditylang.org/en/v0.5.3/solidity-by-example.html}{сайті Solidity} наведено такі приклади контрактів:
+
+\begin{enumerate}[label=\arabic*.]
+    \item \textbf{Voting (Ballot)} --- система делегованого голосування з контролем доступу.
+    \item \textbf{Simple Auction} --- відкритий аукціон з ефірним депозитом.
+    \item \textbf{Blind Auction} --- аукціон з розкриттям ставок після їхнього підтвердження з хешованими ставками.
+    \item \textbf{Payment Channel} --- позаланцюгові мікроплатежі з підписами.
+\end{enumerate}
+
+Зупинюся я на контракті \textbf{Ballot (Voting)} (Голосування), оскільки він демонструє найширший спектр можливостей 
+мови Solidity -- структури, відображення, контроль доступу, логіку делегування та функції перегляду, і при цьому не вимагає 
+переказів Ether, що спрощує тестування. Крім того, його механізм делегування містить чітку можливість оптимізації газу 
+(необмежений цикл \texttt{while}).
+
+\section{Як працюють смарт-контракти (in general)}
+\label{sec:general}
+
+\subsection{Визначення}
+
+\emph{Smart contract} це певна програма, що зберігається в блокчейні Ethereum і виконується автоматично при виклику 
+її функцій. Життєвий цикл складається з чотирьох етапів:
+
+\begin{enumerate}[label=\textbf{\arabic*.}]
+    \item \textbf{Writing.} Розробник пише вихідний код у Solidity (\texttt{.sol}). Компілятор (\texttt{solc}) створює два артефакти:
+        \begin{itemize}
+            \item \emph{EVM bytecode} --- низькорівневі інструкції, що виконуються віртуальною машиною Ethereum.
+            \item \emph{ABI (Application Binary Interface)} --- опис у форматі JSON усіх публічних функцій, їхніх параметрів 
+                та типів повернення. Зовнішні інструменти, такі як (web3.js, ethers.js, Remix), використовують ABI для кодування/декодування 
+                викликів.
+        \end{itemize}
+    \item \textbf{Deployment.} Спеціальна транзакція з порожнім полем \texttt{to} надсилає байт-код до мережі. 
+        EVM виконує \texttt{constructor()} рівно один раз, ініціалізує змінні стану, а мережа присвоює 
+        контракту постійну адресу.
+    \item \textbf{Interaction.} Користувачі (або інші контракти) викликають функції одним із двох способів:
+        \begin{itemize}
+            \item \emph{State-changing functions} (write) --- створюють транзакцію, яка має бути підтверджена в блокчейні; (cost gas).
+            \item \emph{View / pure functions} (read) --- виконується локально by node, (free of charge).
+        \end{itemize}
+    \item \textbf{Termination.} Контракт існує в ланцюжку безстроково. Його можна зробити нефункціональним за допомогою 
+        операційного коду \texttt{selfdestruct} (застарілого в сучасній Solidity) або шляхом впровадження шаблону паузи/знищення.
+\end{enumerate}
+
+\subsection{Стан, гас і вартість контрактів (EVM Storage and Gas)}
+
+Стан контракту зберігається в постійній пам'яті (\emph{storage slots}), кожен з яких має ширину 256 біт. Запис у новий слот коштує 20000~gas (\texttt{SSTORE}); 
+оновлення існуючого слота коштуватиме 5 000 гасу; читання коштує 2 100 гасу (\texttt{SLOAD}). Пам'ять (тимчасова, для кожного виклику) і дані 
+виклику (тільки для читання, для аргументів функції) значно дешевші.
+
+Кожен виконуваний EVM код має фіксовану гасову вартість. Відправник транзакції вказує \emph{gas limit}, а також сплачує $\text{gas used} \times \text{gas price}$ в ETH. 
+Якщо гас закінчується в процесі виконання, всі зміни стану скасовуються, і (що важливо!) спожитий гас на рахунок \emph{не} повертається. 
+Цей механізм запобігає нескінченним циклам і стимулює писати ефективний код.
+
+\subsection{Події (Events)}
+
+Контракти можуть \texttt{emit} (продукувати) певні події. Ці події зберігаються в ланцюжку як журнали транзакцій (це набагато дешевше, 
+ніж зберігання: $\sim$375~gas base + 375~gas per indexed topic + 8~gas per byte of data). Вони доступні для запиту поза ланцюжком, але 
+\emph{не} доступні для читання іншими контрактами.
+
+\subsection{Діаграма життєвого циклу смарт-контракту}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=1.8cm,
+        every node/.style={font=\small},
+        block/.style={
+            rectangle, draw, rounded corners=4pt,
+            minimum width=3.5cm, minimum height=1cm,
+            fill=blue!8, align=center
+        },
+        arr/.style={-{Stealth[length=3mm]}, thick}
+    ]
+        \node[block] (write) {1. Writing\\(\texttt{.sol} source)};
+        \node[block, right=of write] (compile) {Compilation\\(bytecode + ABI)};
+        \node[block, right=of compile] (deploy) {2. Deployment\\(constructor tx)};
+        \node[block, below=of deploy] (chain) {On-chain\\contract address};
+        \node[block, left=of chain] (interact) {3. Interaction\\(call / send tx)};
+        \node[block, left=of interact] (state) {State changes\\or view results};
+
+        \draw[arr] (write) -- (compile);
+        \draw[arr] (compile) -- (deploy);
+        \draw[arr] (deploy) -- (chain);
+        \draw[arr] (chain) -- (interact);
+        \draw[arr] (interact) -- (state);
+    \end{tikzpicture}
+    \caption{Smart contract lifecycle on Ethereum.}
+    \label{fig:lifecycle}
+\end{figure}
+
+\section{Ballot Contract}
+\label{sec:ballot}
+
+Даний розділ я хочу присвятити детальному огляну оригінального контракту \texttt{Ballot} з офіційної документації Solidity 0.5.3, включаючи 
+його структури даних, змінні стану та функції.
+
+\subsection{Призначення договору}
+
+Контракт Ballot реалізує \emph{delegated voting} (делеговане голосування). Головуючий створює бюлетень із переліком пропозицій. Він надає право голосу 
+окремим адресам. Кожен уповноважений виборець може або проголосувати безпосередньо за пропозицію, або делегувати (передати) свій голос 
+іншому виборцю, якому він довіряє. В кінці будь-хто може дізнатися, яка пропозиція перемогла.
+
+\subsection{Структури даних}
+
+\newpage
+\subsubsection{\texttt{struct Proposal} (пропозиція)}
+
+\begin{minted}{solidity}
+    struct Proposal {
+        bytes32 name;     // Short name (up to 32 bytes)
+        uint voteCount;   // Accumulated votes
+    }
+\end{minted}
+
+Тут використовується тип \texttt{bytes32} замість \texttt{string}, оскільки він займає рівно один 256-бітний слот пам'яті, тоді як \texttt{string} вимагає динамічного розподілу пам'яті і є значно дорожчим у газовому вираженні.
+
+\subsubsection{\texttt{struct Voter}}
+
+\begin{minted}{solidity}
+    struct Voter {
+        uint weight;      // Voting power (0 = no right, 1+ = can vote)
+        bool voted;       // True after voting or delegating
+        address delegate; // Delegation target; address(0) if none
+        uint vote;        // Index of chosen proposal (meaningful only
+                          //   if voted==true && delegate==address(0))
+    }
+\end{minted}
+
+\begin{table}[H]
+    \begin{tblr}{
+            colspec = {Q[font=\ttfamily, l, m] X[l, m]},
+            row{1} = {font=\bfseries, c},
+            hlines, vlines,
+            measure = vbox,
+            width = \textwidth,
+        }
+        Поле     & Опис                                                                                                                                                                                            \\
+        weight   & Право голосу. Ініціалізується 0 для всіх адрес. Встановлюється 1 головуючим за допомогою функції \texttt{giveRightToVote()}. Збільшується, коли інші виборці делегують право голосу цій адресі. \\
+        voted    & Boolean flag. Встановлюється на \texttt{true} як у випадку, коли виборець голосує сам \emph{або} коли він делегує свої повноваження. Запобігає подвійному голосуванню.                          \\
+        delegate & Адреса Ethereum, якій виборець делегував свої повноваження. Залишається 0, якщо виборець проголосував самостійно або ще не вчинив жодних дій                                                    \\
+        vote     & Index в масиві \texttt{proposals[]}. Використовується лише тоді, коли виборець голосує безпосередньо (не делегує).                                                                              \\
+    \end{tblr}
+\end{table}
+
+\subsection{Станові змінні}
+
+\begin{minted}{solidity}
+    address public chairperson;
+    mapping(address => Voter) public voters;
+    Proposal[] public proposals;
+\end{minted}
+
+\begin{table}[H]
+    \begin{tblr}{
+        colspec = {Q[font=\ttfamily, l, m]Q[font=\ttfamily, l, m]X[l, m]},
+        row{1} = {font=\bfseries},
+        hlines, vlines,
+        width = \textwidth,
+        }
+        Змінна      & Тип        & Призначення                                                                        \\
+        chairperson & address    & Зберігає адресу розробника контракту. Тільки ця адреса може надавати право голосу. \\
+        voters      & mapping    & Відображає кожну адресу Ethereum у структуру \texttt{Voter}.                       \\
+        proposals   & Proposal[] & Динамічний масив всіх пропозицій. Створюється конструктором один раз.              \\
+    \end{tblr}
+\end{table}
+
+\begin{remark}
+    Відображення не зберігає ключі, тому неможливо пройти по всіх виборцях в ланцюжку.
+\end{remark}
+
+\subsection{Конструктор}
+
+\begin{minted}{solidity}
+    constructor(bytes32[] memory proposalNames) public {
+        chairperson = msg.sender;
+        voters[chairperson].weight = 1;
+
+        for (uint i = 0; i < proposalNames.length; i++) {
+            proposals.push(Proposal({
+                name: proposalNames[i],
+                voteCount: 0
+            }));
+        }
+    }
+\end{minted}
+
+Конструктор виконується \emph{exactly once} під час розгортання контракту. Він записує \texttt{msg.sender} як головуючого, автоматично надає йому 
+вагу голосу ~1 і заповнює масив \texttt{proposals} з наданих йому імен. Вартість гасу для розгортання пропорційна 
+кількості пропозицій (кожен \texttt{push} записує новий слот пам'яті).
+
+\subsection{Функція: \texttt{giveRightToVote(address voter)}}
+
+\begin{minted}{solidity}
+    function giveRightToVote(address voter) public {
+        require(msg.sender == chairperson,
+                "Only chairperson can give right to vote.");
+        require(!voters[voter].voted,
+                "The voter already voted.");
+        require(voters[voter].weight == 0);
+        voters[voter].weight = 1;
+    }
+\end{minted}
+
+\noindent Функція застосовує три заходи безпеки:
+\begin{enumerate}
+    \item Тільки головуючий може її викликати (access control).
+    \item Цільова адреса must not already possess voting rights (я хз як це перекласти нормально).
+    \item Ціль не повинна ще мати права голосу (\texttt{weight == 0}).
+\end{enumerate}
+
+У разі успіху вага виборця встановлюється на ~1, що дозволяє йому брати участь у голосування. Приблизна вартість гасу складає: 
+$\sim$47\,000 (запис нового слота пам'яті).
+
+\textbf{Обмеження:} Кожен виборець потребує окремої транзакції. Для $N$ виборців головуючий сплачує $N \times (\sim\!47\,000 + 21\,000_{\text{base}})$ гасу. 
+У самій документації Solidity розробники ставлять нам питання: \emph{"Чи можете ви придумати кращий спосіб?"{}} -- на це питання я дам в розділі з оптимізацією.
+
+\subsection{Функція: \texttt{delegate(address to)}}
+
+Це, певно, найскладніша функція в контракті. Виглядає вона наступним чином:
+
+\newpage
+\begin{minted}{solidity}
+    function delegate(address to) public {
+        Voter storage sender = voters[msg.sender];
+        require(!sender.voted, "You already voted.");
+        require(to != msg.sender, "Self-delegation is disallowed.");
+
+        while (voters[to].delegate != address(0)) {
+            to = voters[to].delegate;
+            require(to != msg.sender, "Found loop in delegation.");
+        }
+
+        sender.voted = true;
+        sender.delegate = to;
+        Voter storage delegate_ = voters[to];
+
+        if (delegate_.voted) {
+            proposals[delegate_.vote].voteCount += sender.weight;
+        } else {
+            delegate_.weight += sender.weight;
+        }
+    }
+\end{minted}
+
+\begin{enumerate}
+    \item Завантажує структуру \texttt{Voter} виборця за посиланням (\texttt{storage} pointer).
+    \item Перевіряє, що виборець ще не голосував і не делегує сам собі.
+    \item \textbf{Розв'язує ланцюжок делегування:} Цикл \texttt{while} проходить ланцюг делегування (A$\to$B$\to$C) 
+        до тих пір, поки не знайде виборця, який не делегує далі. Цей цикл також перевіряє наявність циклічного делегування.
+    \item Позначає виборця як проголосовавшого та записує остаточного делегата.
+    \item \textbf{Два результати:}
+    \begin{itemize}
+        \item Якщо остаточний делегат вже голосував, вага виборця додається безпосередньо до обраної ним пропозиції.
+        \item Якщо остаточний делегат ще не голосував, вага виборця переноситься до делегата (накопичуючи voting power).
+    \end{itemize}
+\end{enumerate}
+
+\noindent \textbf{Гасові ризики:} Цикл \texttt{while} зчитує storage, сплачуючи (\texttt{SLOAD} = 2\,100~gas) на кожній ітерації. 
+Ланцюжок делегування довжиною $k$ коштує приблизно $k \times 2\,100$~gas лише за один цикл. Чим довше ланцюжок, тим 
+більша ймовірність вичерпати гасовий ліміт блоку.
+
+\subsection{Функція: \texttt{vote(uint proposal)}}
+
+\begin{minted}{solidity}
+    function vote(uint proposal) public {
+        Voter storage sender = voters[msg.sender];
+        require(sender.weight != 0, "Has no right to vote");
+        require(!sender.voted, "Already voted.");
+
+        sender.voted = true;
+        sender.vote = proposal;
+        proposals[proposal].voteCount += sender.weight;
+    }
+\end{minted}
+
+Все доволі просто: позначити виборця як проголосовавшого, записати його вибір і додати його вагу до підрахунку обраної пропозиції. 
+Якщо індекс \texttt{proposal} виходить за межі масиву, Solidity автоматично викликає \texttt{revert}, скасовуючи всі зміни стану. 
+Вартість по гасу: $\sim$47\,000--65\,000 залежно від того, чи слоти пам'яті є новими або вже записаними.
+
+\subsection{Функції перегляду: \texttt{winningProposal()} and \texttt{winnerName()}}
+
+\begin{minted}{solidity}
+    function winningProposal() public view
+        returns (uint winningProposal_)
+    {
+        uint winningVoteCount = 0;
+        for (uint p = 0; p < proposals.length; p++) {
+            if (proposals[p].voteCount > winningVoteCount) {
+                winningVoteCount = proposals[p].voteCount;
+                winningProposal_ = p;
+            }
+        }
+    }
+
+    function winnerName() public view
+        returns (bytes32 winnerName_)
+    {
+        winnerName_ = proposals[winningProposal()].name;
+    }
+\end{minted}
+
+Обидві функції є типу \texttt{view}. Це означає, що вони не змінюють стан і \emph{free to call} (без транзакції, без витрати гасу) 
+ззовні. Функція \texttt{winningProposal()} ітерує по всіх пропозиціях та повертає індекс тієї, яка має найбільшу кількість 
+голосів (\texttt{voteCount}). Функція \texttt{winnerName()} викликає вищезгадану для отримання індексу переможця, а потім просто 
+повертає його ім'я.
+
+\textbf{Обмеження:} Не враховує рівність голосів! Якщо є випадок, де дві пропозиції мають однакову кількість голосів, перемогу отримує та, яка має нижчий індекс.
+
+\subsection{Діаграма взаємодії контрактів}
+
+Візуалізувати це можна наступним чином:
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=1.4cm and 2.5cm,
+        every node/.style={font=\small},
+        actor/.style={
+            rectangle, draw, rounded corners=3pt,
+            minimum width=2.8cm, minimum height=0.9cm,
+            fill=orange!15, align=center
+        },
+        func/.style={
+            rectangle, draw, rounded corners=3pt,
+            minimum width=3.2cm, minimum height=0.9cm,
+            fill=green!10, align=center
+        },
+        arr/.style={-{Stealth[length=2.5mm]}, thick, draw=gray!70}
+    ]
+        % Actors
+        \node[actor] (chair) {Chairperson};
+        \node[actor, below=3.0cm of chair] (voter) {Voter};
+
+        % Functions
+        \node[func, right=2cm of chair] (deploy) {\texttt{constructor()}};
+        \node[func, below=of deploy] (grant) {\texttt{giveRightToVote()}};
+        \node[func, right=2cm of voter] (vote) {\texttt{vote()}};
+        \node[func, below=of vote] (deleg) {\texttt{delegate()}};
+        \node[func, right=2cm of grant] (winner) {\texttt{winnerName()}};
+
+        % Arrows
+        \draw[arr] (chair) -- (deploy) node[midway, above, font=\scriptsize] {deploys};
+        \draw[arr] (chair) -- (grant) node[midway, right, font=\scriptsize, xshift=2pt] {grants rights};
+        \draw[arr] (voter) -- (deleg) node[midway, above, font=\scriptsize] {delegates};
+        \draw[arr] (voter) -- (vote) node[midway, above, font=\scriptsize] {votes};
+        \draw[arr] (chair) to[bend right=20] node[midway, left, font=\scriptsize] {can also vote} (vote);
+        \draw[arr, dashed] (winner.south) -- ++(0,-0.7) node[below, font=\scriptsize] {anyone (free)};
+    \end{tikzpicture}
+    \caption{Interaction roles in the Ballot contract.}
+    \label{fig:interaction}
+\end{figure}
