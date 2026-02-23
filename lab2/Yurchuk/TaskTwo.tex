@@ -340,6 +340,80 @@ Enums \texttt{Priority} визначає три рівня: \texttt{Low}~(0), \t
     6   & Кастомний модифікатор для зменшення дублювання коду (менший байт-код).           \\
 \end{tblr}
 
+\subsection{Деплоймент і тестування контракту}
+
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=2em]
+    \item \textbf{Створюємо новий файл} в Remix у папці contracts: \texttt{TodoList.sol}. Додаємо в нього код 
+        з розділу~\ref{sec:todo-code}.
+    \item \textbf{Компілюємо}, як і раніше, з Solidity \texttt{0.8.21}, з увімкненою оптимізацією (200 runs).
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen6.png}
+            \caption{Compilation settings in Remix IDE}
+            \label{fig:screen6}
+        \end{figure}
+    \item \textbf{Deploy} via Injected Provider (MetaMask, Sepolia). Контруктор не потребує вхідних аргументів (порівняно з 
+        завданням 1) --- просто натискаємо \textbf{Deploy} і підтверджуємо в MetaMask.
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen7.png}
+            \caption{Deployment result in Remix IDE}
+            \label{fig:screen7}
+        \end{figure}
+    \item \textbf{Тестимо роботу:}
+        \begin{enumerate}[label=\alph*), leftmargin=1.5em]
+            \item Викликаємо \texttt{createTask} з довільними параметрами. Мені перше прийшло на думку -- це список покупок. Тому 
+                \texttt{"Buy groceries"}, \texttt{"Milk, 10 Eggs, Bread, Sausages"}, \texttt{1} (Medium priority). І підтверджуємо 
+                наш запит-транзакцію в MetaMask.
+            \item Викликаємо \texttt{createTask} знову. Нехай на цей раз багатостраждальна лаба: \texttt{"Finish lab report"}, 
+                \texttt{"Complete Task 2 analysis"}, \texttt{2} (High priority). Теж підтверджуємо.
+            \item Викликаємо \texttt{getMyTasks} --- повертає нам масив з двох, встановлених щойно, задач.
+            \item Викликаємо \texttt{toggleComplete} з індексом \texttt{0} --- відмічає першу задачу як виконану.
+            \item Викликаємо \texttt{getStats} --- повертає статус поточних: total=2, completed=1, pending=1.
+            \item Викликаємо \texttt{deleteTask} with index \texttt{0} --- видаляє виконану задачу.
+            \item Викликаємо \texttt{getMyTasks} --- має показати лише одну задачу, яка залишилася.
+        \end{enumerate}
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen8.png}
+            \caption{Interaction results in Remix IDE}
+            \label{fig:screen8}
+        \end{figure}
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen9.png}
+            \caption{Result after deleting a task in Remix IDE}
+            \label{fig:screen9}
+        \end{figure}
+    \item \textbf{Verify on Etherscan} заходимо на \\ \texttt{https://sepolia.etherscan.io/address/<ADDRESS>}. 
+        Перевіряємо, що відбулися відповідні події (events) у логах транзакцій.
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen10.png}
+            \caption{Etherscan showing events}
+            \label{fig:screen10}
+        \end{figure}
+\end{enumerate}
+
+\section{Висновки по тасці 2}
+
+В цьому завдані я створив смарт-контракт \textbf{TodoList} з повною CRUD (Create, Read, Update, Delete) функціональністю. Контракт демонструє нам 
+ключові можливості Solidity:
+\begin{enumerate}
+    \item Designed and developed an original \textbf{TodoList} smart contract implementing full CRUD functionality.
+    \item Demonstrated key Solidity features: \texttt{enum}, \texttt{struct}, nested \texttt{mapping}, custom \texttt{modifier}, \texttt{events}, and view functions.
+    \item Applied gas optimisation techniques including \texttt{external} visibility, \texttt{calldata} parameters, swap-and-pop deletion, and \texttt{unchecked} arithmetic.
+    \item Successfully deployed and tested the contract on the Sepolia testnet, verifying all operations via Remix IDE and Sepolia Etherscan.
+
+    \item Реалізували доволі оригінальний смарт-контракт \textbf{TodoList}, що має повну функціональність CRUD.
+    \item Продемонстрував ключові функції Solidity: \texttt{enum}, \texttt{struct}, вкладений \texttt{mapping}, 
+        власний \\ \texttt{modifier}, \texttt{events} та функції перегляду.
+    \item Трохи оптимізував витрати газу, використавги змінні \texttt{external}, параметри \texttt{calldata}, 
+        видалення swap-and-pop та арифметику \texttt{unchecked}.
+    \item Розгорнув цей контракт у тестовій мережі Sepolia, перевірив всі операції в середовищі Remix IDE та 
+        Sepolia Etherscan.
+\end{enumerate}
+
 \newpage
 \selectlanguage{english}
 \nocite{*}
