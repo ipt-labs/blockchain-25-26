@@ -1,0 +1,71 @@
+% !TEX program = lualatex
+\documentclass{article}
+\input{packages.tex}
+
+\addbibresource{references.bib}
+
+% Colors style
+\definecolor{owaspRed}{RGB}{204,0,0}
+\definecolor{owaspOrange}{RGB}{255,140,0}
+\definecolor{owaspYellow}{RGB}{255,200,0}
+\definecolor{dappBlue}{RGB}{41,98,255}
+\definecolor{uniPink}{RGB}{255,0,122}
+\definecolor{secGreen}{RGB}{0,150,80}
+\definecolor{warnAmber}{RGB}{255,170,0}
+\definecolor{critRed}{RGB}{220,40,40}
+
+% Verbatim styling
+\DefineVerbatimEnvironment{code}{Verbatim}{
+    frame=single,
+    framesep=3mm,
+    rulecolor=\color{codeframe},
+    fillcolor=\color{codebg},
+    fontsize=\small,
+    breaklines=true,
+    breakanywhere=true
+}
+
+\begin{document}
+\input{title.tex}
+
+\makeatletter
+\renewcommand{\tableofcontents}{
+  \clearpage
+  \thispagestyle{empty}
+  \begin{center}
+          \bfseries\Large\MakeUppercase{Зміст}
+  \end{center}
+  \addvspace{42pt}
+  \@starttoc{toc}
+}
+\renewcommand{\@pnumwidth}{2em}
+\renewcommand{\@tocrmarg}{3em}
+\makeatother
+
+\tableofcontents
+\newpage
+
+\cleardoublepage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\newpage
+
+% Clear the header and footer
+\fancyhead{}
+\fancyfoot{}
+% Set the right side of the footer to be the page number
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\fancyfoot[C]{
+  \begin{textblock*}{2cm}(20cm,27.3cm) % bottom right corner of A4
+    \small\thepage
+  \end{textblock*}
+}
+\pagestyle{fancy}
+
+\newtheorem*{remark}{Примітка}
+
+\input{TaskOne.tex}
+\input{TaskTwo.tex}
+
+\end{document}
