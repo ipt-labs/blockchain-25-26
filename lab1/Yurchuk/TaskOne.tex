@@ -1,0 +1,568 @@
+\section{Невеличкий вступ}
+
+Технологія блокчейн кардинально змінила наше уявлення про децентралізовані обчислення, фінансові транзакції та бездовірчі 
+системи (trustless systems). З моменту публікації "Bitcoin whitepaper"{}~\cite{nakamoto2008} by Satoshi Nakamoto в 2008 році, 
+з'явилося безліч платформ блокчейн, кожна з яких має свої архітектурні рішення, процедури розгортання та операційні характеристики.
+
+У своїй лабораторній, я розглядав і порівнював, здебільшого зазначені в завданнях до лабораторної, особливості розгортання п'яти 
+основних систем блокчейну/криптовалюти: \textbf{Ethereum}~\cite{buterin2014, wood2018}, \textbf{Bitcoin}~\cite{nakamoto2008}, 
+\textbf{Dash}~\cite{dash2015}, \textbf{NEO}~\cite{neo2018} та \textbf{Litecoin}~\cite{litecoin}. 
+Свій аналіз я спрямував більше на практичні аспекти реалізації, розгортання та конфігурації кожної системи, вивченні їх базової 
+архітектури, механізмів консенсусу, мережевих рівнів та можливості обміну модулями між ними.
+
+Поки в планах наступне: у розділі 2 описати теоретичні основи кожної системи, далі в розділі 3 доволі детально порівняти їх за різними 
+параметрами, розглянути їх взаємозамінність. А далі у розділі 4 планую навести покрокові, як я робитиму, практичне розгортання Ethereum 
+(певно найпростіше, що можна взяти) у середовищі на базі WSL за setup-ами від~\cite{pathirana2019, pradeep2020}. І відповідно в кінці підбити підсумки по отриманих результатах.
+
+\section{Огляд систем блокчейн і криптовалют}
+
+\subsection{Bitcoin}
+
+Bitcoin -- це певно перша і найвідоміша криптовалюта, опублікована в 2008 році анонімним девелопером з псевдонімом Сатоші Накамото. 
+Вона використовує модель \textbf{UTXO (Unspent Transaction Output)} для відстеження балансів і механізм консенсусу \textbf{Proof-of-Work}, 
+заснований на алгоритмі хешування SHA-256.
+
+Ключові особливості Bitcoin включають в себе:
+\begin{itemize}[nosep]
+    \item \textbf{Жодних смарт-контрактів} (в традиційному сенсі) -- Bitcoin Script навмисно є non-Turing-complete.
+    \item \textbf{Block time} -- генерація нового блоку $\approx 10$ хвилин, \textbf{block size} обмежений $\approx 1$--$4$ MB (з SegWit).
+    \item \textbf{Загальний обсяг} обмежений 21 мільйоном BTC.
+    \item \textbf{Networking} -- використосує особливий мережевий P2P protocol через TCP (port 8333), розповсюдження інформації на основі gossip-based ("пліткування з сусідами").
+\end{itemize}
+
+\subsection{Ethereum}
+
+Ethereum -- відкрита розподілена обчислювальна платформа на основі блокчейну, яка підтримує функціональність смарт-контрактів. 
+На відміну від Bitcoin, який був розроблений \underline{в першу чергу} як цифрова валюта, Ethereum був задуманий як універсальний 
+програмований блокчейн \textcolor{red}{(!)}. Власна криптовалюта блокчейну Ethereum це \textbf{Ether (ETH)}.
+
+\noindent Основні архітектурні особливості Ethereum включають:
+\begin{itemize}[nosep]
+    \item \textbf{Ethereum Virtual Machine (EVM)} -- віртуальна машина, яка виконує смарт-контракти, з повною функціональністю 
+        Тюрінга (це такий а-ля емулятор для виконання програм за скінченний час і пам'ять);
+    \item \textbf{State model} -- модель на основі облікових записів діє як банківська книга, відстежуючи баланс і забезпечує 
+        можливість укладання складних смарт-контрактів. (в Bitcoin застосовується UTXO model, де рахунки ефективно управляються смарт-контрактами,
+        і в якій забезпечується вищий рівень конфіденційності та здійснюється паралельна обробка даних);
+    \item \textbf{Protocol of Consensus} -- первісно застосовувався Proof-of-Work (Ethash), але у вересні 22 зробили трансфер на Proof-of-Stake (Casper/Beacon chain);
+    \item \textbf{Smart Contracts} -- пишуться мовами Solidity, Vyper та деякими іншими мовами і є EVM-compatible;
+    \item \textbf{Gas system} -- обчислювальні витрати вимірюються за допомогою так званих тарифів "gas fees".
+\end{itemize}
+
+Ethereum -- це peer-to-peer надбудова над базою інтернет протоколів TCP/IP~\cite{dagan2018}. Кожен вузол запускає копію 
+блокчейну та бере участь у валідації та розповсюдженні блоків. Офіційний клієнт \textbf{Geth} (Go-Ethereum) реалізує протокол 
+RLC (Remote Procedure Call) Node Discovery Protocol, що базується на DHT (Distributed Hash Table) типу Kademlia для виявлення 
+однорангових вузлів (peers)~\cite{dagan2018}.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=1.2cm and 2cm,
+        block/.style={rectangle, draw, fill=ethpurple!15, minimum width=3cm, minimum height=0.8cm, align=center, rounded corners=2pt},
+        arrow/.style={-{Stealth[length=3mm]}, thick}
+        ]
+        \node[block] (app) {DApp / User};
+        \node[block, below=of app] (sc) {Smart Contracts (EVM)};
+        \node[block, below=of sc] (consensus) {Consensus Layer\\(PoS / formerly PoW)};
+        \node[block, below=of consensus] (p2p) {P2P Network\\(RLC / devp2p)};
+        \node[block, below=of p2p] (net) {Internet (TCP/UDP)};
+
+        \draw[arrow] (app) -- (sc);
+        \draw[arrow] (sc) -- (consensus);
+        \draw[arrow] (consensus) -- (p2p);
+        \draw[arrow] (p2p) -- (net);
+    \end{tikzpicture}
+    \caption{Архітектура "шарів"{} Ethereum-а}
+    \label{fig:eth-arch}
+\end{figure}
+
+\subsection{Dash}
+
+Dash (originally ``Darkcoin'') являє собою fork від кодової бази Bitcoin, але з додатковими функціями конфіденційності 
+та управління. В ньому було запроваджено:
+\begin{itemize}[nosep]
+    \item \textbf{Masternodes} -- мережа другого рівня (second-tier network) з мотивованими (incentivized) вузлами, які забезпечують InstantSend і CoinJoin (PrivateSend).
+    \item \textbf{Алгорит гешування X11} -- ланцюжкова послідовність із 11 криптографічних геш-функцій.
+    \item \textbf{Система управління фінансами (Treasury system)} -- 10\%  винагороди за блок виділяється на фінансування ідей щодо розвитку (за них голосуються masternodes).
+    \item \textbf{Block time} -- генерація нового блоку складає $\approx 2.5$ хвилин.
+\end{itemize}
+
+\subsection{NEO}
+
+NEO (колишня назва -- AntShares) китайська блокчейн-платформа, яку частенько називають "китайським ефіром (Ethereum)"{}. 
+Вона також підтримує виконання смарт-контрактів, але має значні відмінності по своїй архітектурі:
+\begin{itemize}[nosep]
+    \item \textbf{Consensus} -- делегована візантійська відмовостійкість (delegated Byzantine Fault Tolerance - dBFT), 
+        що забезпечує детермінованість виконання.
+    \item \textbf{Dual token model} -- NEO (токен управління, є неподільним) and GAS (токен-утиліта для виконання контрактів).
+    \item \textbf{Multi-language support} -- смарт-контракти можуть бути написані на різних мовах програмування, таких як: 
+        C\#, Python, Java, Go (з подальшим виконанням у віртуальній машині NeoVM).
+    \item \textbf{Інтеграція цифрової ідентичності} та орієнтація на сурове дотримання нормативних вимог.
+\end{itemize}
+
+\subsection{Litecoin}
+
+Litecoin був створений Чарлі Лі в 2011 році як "полегшена"{} версія Bitcoin. Це один з найперших форків від Bitcoin, який 
+і досі має багато спільного з кодом Bitcoin. Основні особливості:
+
+\begin{itemize}[nosep]
+    \item \textbf{Scrypt hashing} -- алгоритм, що вимагає великого обсягу пам'яті (первинно розроблявся для протидії майнінгу ASIC)
+    \item \textbf{Block time} -- генерування складає $\approx 2.5$ хвилин (це у 4$\times$ швидше за Bitcoin).
+    \item \textbf{Total supply} -- 84 мільйони LTC (у 4$\times$ перевищує обсяг Bitcoin-a).
+    \item \textbf{UTXO model} -- така сама структура транзакцій, як у Bitcoin.
+    \item \textbf{Test platform} -- Часто стає тестовим майданчиком для функцій Bitcoin-а (наприклад, той же SegWit 
+        був активований спочатку на Litecoin).
+\end{itemize}
+
+\section{Порівняльний аналіз архітектурних рішень та процедур розгортання}
+
+\subsection{Механізми консенсусу}
+
+Механізм консенсусу є основним модулем, який визначає, як мережа блокчейну досягає згоди щодо стану реєстру. 
+Кожен з названих нами п'яти блокчейнів використовують принципово різні підходи:
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {X[1.5,l] X[2,l] X[2,l] X[2,l]},
+            hlines, vlines,
+            row{1} = {c, bg=ethpurple!20, font=\bfseries},
+            rows = {m},
+        }
+        Блокчейн & Алгоритм гешування & Протокол          & Остаточність                                 \\
+        Ethereum & Gasper (PoS)       & Proof-of-Stake    & Probabilistic $\to$ deterministic (2 epochs) \\
+        Bitcoin  & SHA-256            & Proof-of-Work     & Probabilistic ($\sim$6 confirmations blocks) \\
+        Dash     & X11 + Masternodes  & Hybrid: PoW + PoS & Instant (via ChainLocks)                     \\
+        NEO      & dBFT 2.0           & Delegated BFT     & Deterministic (1 block, no forks)            \\
+        Litecoin & Scrypt             & Proof-of-Work     & Probabilistic ($\sim$6 confirmations blocks) \\
+    \end{tblr}
+    \caption{Порівняння протоколів консенсусу}
+    \label{tab:consensus}
+\end{table}
+
+\subsection{Архітектура мережі та P2P-взаємодія}
+
+Всі п'ять систем працюють як однорангові децентралізовані (peer-to-peer) мережі, побудовані поверх мережі Інтернет. 
+Однак їхні протоколи виявлення однорангових вузлів і комунікації значно відрізняються.
+
+\textbf{Ethereum} використовує набір протоколів devp2p, який включає протокол виявлення вузлів RLPx на основі модифікованого 
+DHT Kademlia. Кожен вузол ідентифікується за допомогою ідентифікатора \texttt{enode} (хеш SHA3 його відкритого ключа). 
+Реалізація Kademlia використовує метрику відстані на основі XOR з 256 сегментами, кожен з яких містить до 16 записів. 
+Виявлення однорангових вузлів (peers) використовує чотири типи повідомлень UDP: \texttt{ping}, \texttt{pong}, 
+\texttt{findnode} та \texttt{neighbors}. Передача даних відбувається через зашифровані TCP-з'єднання з використанням 
+транспортного протоколу RLPx із використанням шифрування ECIES (Elliptic Curve Integrated Encryption Scheme).
+
+\textbf{Bitcoin і Litecoin} використовують простіший P2P-протокол на основі обміну інформацією (gossip-based). Masternodes 
+виявляють однорангові вузли за допомогою DNS-посівів і поширення повідомлень \texttt{addr}. Протокол працює через 
+TCP (Bitcoin на порту 8333, Litecoin на порту 9333). Структурованого DHT немає; натомість вузли підтримують базу 
+даних \texttt{addrman} (address manager) відомих однорангових вузлів.
+
+\textbf{Dash} розширює протокол P2P Bitcoin окремим masternode layer. Masternodes утворюють накладну мережу другого 
+рівня з детермінованим порядком, що дозволяє використовувати такі функції, як InstantSend quorums і CoinJoin mixing rounds.
+
+\textbf{NEO} використовує структурований механізм виявлення однорангових вузлів із seed nodes. Консенсус dBFT вимагає 
+меншого набору вузлів консенсусу (наразі 7 в основній мережі), які "спілкуються"{} через спеціальний канал консенсусу.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+            peer/.style={circle, draw, fill=ethpurple!20, minimum size=0.7cm, inner sep=0pt, font=\tiny},
+            master/.style={circle, draw, fill=btcorange!30, minimum size=0.9cm, inner sep=0pt, font=\tiny},
+            boot/.style={circle, draw, fill=neogreen!30, minimum size=0.9cm, inner sep=0pt, font=\tiny\bfseries},
+            conn/.style={-, thin, gray!60},
+            highlight/.style={-, thick, ethpurple}
+        ]
+        % Ethereum-style network
+        \begin{scope}[shift={(-4,0)}]
+            \node[boot] (b1) at (0,2) {Bootnode};
+            \node[peer] (e1) at (-1.5,0.5) {N1};
+            \node[peer] (e2) at (0,0) {N2};
+            \node[peer] (e3) at (1.5,0.5) {N3};
+            \node[peer] (e4) at (-0.8,-1.2) {N4};
+            \node[peer] (e5) at (0.8,-1.2) {N5};
+
+            \draw[conn] (b1) -- (e1);
+            \draw[conn] (b1) -- (e2);
+            \draw[conn] (b1) -- (e3);
+            \draw[conn] (e1) -- (e2);
+            \draw[conn] (e2) -- (e3);
+            \draw[conn] (e1) -- (e4);
+            \draw[conn] (e3) -- (e5);
+            \draw[conn] (e4) -- (e5);
+            \draw[conn] (e2) -- (e4);
+            \draw[conn] (e2) -- (e5);
+
+            \node[below, font=\small\bfseries] at (0,-2) {Ethereum (Kademlia)};
+        \end{scope}
+
+        % Bitcoin-style network
+        \begin{scope}[shift={(0,0)}]
+            \node[peer] (b1) at (0,1.8) {N1};
+            \node[peer] (b2) at (-1.3,0.6) {N2};
+            \node[peer] (b3) at (1.3,0.6) {N3};
+            \node[peer] (b4) at (-0.8,-0.8) {N4};
+            \node[peer] (b5) at (0.8,-0.8) {N5};
+
+            \draw[conn] (b1) -- (b2);
+            \draw[conn] (b1) -- (b3);
+            \draw[conn] (b2) -- (b4);
+            \draw[conn] (b3) -- (b5);
+            \draw[conn] (b4) -- (b5);
+            \draw[conn] (b2) -- (b3);
+
+            \node[below, font=\small\bfseries] at (0,-2) {Bitcoin/LTC (Gossip)};
+        \end{scope}
+
+        % Dash-style network (two layers)
+        \begin{scope}[shift={(4,0)}]
+            \node[master] (m1) at (0,2) {MN};
+            \node[master] (m2) at (-1.2,1) {MN};
+            \node[master] (m3) at (1.2,1) {MN};
+            \node[peer] (d1) at (-1.3,-0.3) {N1};
+            \node[peer] (d2) at (0,-0.6) {N2};
+            \node[peer] (d3) at (1.3,-0.3) {N3};
+
+            % Masternode layer
+            \draw[highlight] (m1) -- (m2);
+            \draw[highlight] (m1) -- (m3);
+            \draw[highlight] (m2) -- (m3);
+            % Regular connections
+            \draw[conn] (m2) -- (d1);
+            \draw[conn] (m3) -- (d3);
+            \draw[conn] (d1) -- (d2);
+            \draw[conn] (d2) -- (d3);
+            \draw[conn] (m1) -- (d2);
+
+            \node[below, font=\small\bfseries] at (0,-2) {Dash (Two-tier)};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Топології мереж P2P для різних блокчейнів}
+    \label{fig:p2p-networks}
+\end{figure}
+
+\subsection{Структури даних та управління станами}
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {X[1.5,l] X[2,l] X[2,l] X[2,l]},
+            hlines, vlines,
+            row{1} = {bg=ethpurple!20, font=\bfseries},
+            rows = {m},
+        }
+        Блокчейн & Станова модель  & Структура даних               & Cховище           \\
+        Ethereum & Account-based   & Modified Merkle-Patricia Trie & LevelDB / Pebble  \\
+        Bitcoin  & UTXO            & Merkle Tree                   & LevelDB           \\
+        Dash     & UTXO (extended) & Merkle Tree + MN lists        & LevelDB / RocksDB \\
+        NEO      & Account-based   & Merkle Tree + state root      & LevelDB           \\
+        Litecoin & UTXO            & Merkle Tree                   & LevelDB           \\
+    \end{tblr}
+    \caption{Станові моделі і структури даних в блокчейнах}
+    \label{tab:datastructures}
+\end{table}
+
+Фундаментальна різниця між account-based системами (Ethereum, NEO) та UTXO (Bitcoin, Dash, Litecoin) проявляється в 
+в процесі розгортання та взаємозамінності модулів. У системах UTXO кожна транзакція споживає попередні виходи та створює 
+нові. У account-based системах глобальний стан явно відстежує залишки на рахунках та cховище контрактів.
+
+\subsection{Можливості смарт-контрактів}
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {X[1.5,l] X[1.5,l] X[2,l] X[2,l]},
+            hlines, vlines,
+            row{1} = {bg=ethpurple!20, font=\bfseries},
+            rows = {m},
+        }
+        Блокчейн & Віртувальне середовище & Мови програмування    & Здібності блокчейну       \\
+        Ethereum & EVM                    & Solidity, Vyper       & Turing-complete           \\
+        Bitcoin  & Bitcoin Script         & Script opcodes        & Non-Turing-complete       \\
+        Dash     & ---                    & ---                   & No native smart contracts \\
+        NEO      & NeoVM                  & C\#, Python, Java, Go & Turing-complete           \\
+        Litecoin & Bitcoin Script         & Script opcodes        & Non-Turing-complete       \\
+    \end{tblr}
+    \caption{Порівняння можливостей блокчейнів щодо смарт-контрактів}
+    \label{tab:smartcontracts}
+\end{table}
+
+
+\subsection{Deployment Parameters and Requirements}
+
+В наступній таблиці хочу навести основні параметри розгортання для запуску повного вузла блокчейну:
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {X[1.5,l] X[1.2,c] X[1.2,c] X[1.2,c] X[1.8,c]},
+            hlines, vlines,
+            row{1} = {bg=ethpurple!20, font=\bfseries},
+            rows = {m},
+        }
+        Блокчейн & RAM (min) & ROM (min)    & Default Port & Primary Client    \\
+        Ethereum & 8 GB      & $\sim$1 TB+  & 30303        & Geth / Nethermind \\
+        Bitcoin  & 2 GB      & $\sim$600 GB & 8333         & Bitcoin Core      \\
+        Dash     & 4 GB      & $\sim$40 GB  & 9999         & Dash Core         \\
+        NEO      & 4 GB      & $\sim$20 GB  & 10333        & neo-cli (C\#)     \\
+        Litecoin & 2 GB      & $\sim$120 GB & 9333         & Litecoin Core     \\
+    \end{tblr}
+    \caption{Параметри розгортання mainnet у 2024--2025 роках}
+    \label{tab:deployment}
+\end{table}
+
+\subsection{Конфігурація генезис-блоку}
+
+Будь який блокчейн починається з так званого \textbf{генезис-блоку (genesis block)}. У приватних/тестових розгортаннях його конфігурація визначає початкові параметри мережі. Нижче наведено приклад для Ethereum (\texttt{genesis.json}):
+\begin{code}
+    {
+    "config": {
+    "chainId": 12345,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0
+    },
+    "alloc": {},
+    "coinbase": "0x0000000000000000000000000000000000000000",
+    "difficulty": "0x400",
+    "extraData": "0x00",
+    "gasLimit": "0x8000000",
+    "nonce": "0x0000000000000042",
+    "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "timestamp": "0x0"
+    }
+\end{code}
+
+\noindent Основними важливими полями є:
+\begin{itemize}[nosep]
+    \item \texttt{chainId} -- унікальний ідентифікатор, що відрізняє створювану приватну мережу від основної мережі (chainId=1).
+    \item \texttt{difficulty} -- контролює складність майнінгової головоломки (mining puzzle complexity); нижчі значення дозволяють швидший майнінг у тестових середовищах.
+    \item \texttt{gasLimit} -- максимальний дозволений обсяг гасу на блок, що встановлює верхню межу для виконання контракту.
+    \item \texttt{alloc} -- дозволяє ініціалізувати (робити pre-funding) рахунків валютою Ether при їх створенні.
+    \item Поля \texttt{*Block} вказують, під яким номером блоку активуються різні EIP (пропозиції щодо вдосконалення Ethereum) та хард-форки. Встановлення всіх значень на 0 дозволяє активувати всі функції з самого початку.
+\end{itemize}
+
+\paragraph{} Для порівняння, генезисний блок Bitcoin hard-coded в клієнтському програмному забезпеченні і не може бути налаштований 
+таким же чином. Тому при розгортанні тестової мережі Bitcoin або мережі regtest параметри модифікуються під час компіляції 
+за допомогою констант або прапорців конфігурації (\texttt{-regtest}, \texttt{-testnet}).
+
+\subsection{Створення блоків і час їх генерації}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                ybar,
+                bar width=0.8cm,
+                ylabel={Block Time (seconds)},
+                symbolic x coords={Ethereum, Bitcoin, Dash, NEO, Litecoin},
+                xtick=data,
+                ymin=0,
+                ymax=700,
+                nodes near coords,
+                nodes near coords align={vertical},
+                every node near coord/.append style={font=\small},
+                width=0.85\textwidth,
+                height=7cm,
+                grid=major,
+                grid style={dashed, gray!30},
+                xticklabel style={rotate=0, anchor=north},
+            ]
+            \addplot[fill=ethpurple!60] coordinates {
+                    (Ethereum, 12)
+                    (Bitcoin, 600)
+                    (Dash, 150)
+                    (NEO, 15)
+                    (Litecoin, 150)
+                };
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Середній час генерації блоків (в секундах)}
+    \label{fig:blocktimes}
+\end{figure}
+
+\subsection{Пропускна здатність}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                ybar,
+                bar width=0.8cm,
+                ylabel={Transactions per Second (TPS)},
+                symbolic x coords={Ethereum, Bitcoin, Dash, NEO, Litecoin},
+                xtick=data,
+                ymin=0,
+                ymax=1200,
+                nodes near coords,
+                nodes near coords align={vertical},
+                every node near coord/.append style={font=\small},
+                width=0.85\textwidth,
+                height=7cm,
+                grid=major,
+                grid style={dashed, gray!30},
+            ]
+            \addplot[fill=btcorange!60] coordinates {
+                    (Ethereum, 30)
+                    (Bitcoin, 7)
+                    (Dash, 56)
+                    (NEO, 1000)
+                    (Litecoin, 56)
+                };
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Приблизна пропускна здатність транзакцій базового рівня (TPS) для різних блокчейнів}
+    \label{fig:tps}
+\end{figure}
+
+\section{Взаємозамінність і сумісність модулів}
+
+Також я хочу розглянути таке питання: чи можна компоненти (модулі) однієї системи замінити на компоненти іншої системи, 
+а також подивитися на архітектурну сумісність або несумісність.
+
+\subsection{Системні модулі і матриця сумісності блокчейнів}
+
+Блокчейн може бути розкладений на такі логічні модулі:
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        module/.style={rectangle, draw, thick, rounded corners=3pt, minimum width=3.2cm, minimum height=1cm, align=center, font=\small},
+        arrow/.style={-{Stealth[length=2.5mm]}, thick, gray!70}
+        ]
+        \node[module, fill=ethpurple!15] (net) at (0,0) {Networking\\Module};
+        \node[module, fill=btcorange!15] (con) at (4.5,0) {Consensus\\Module};
+        \node[module, fill=neogreen!15] (tx) at (9,0) {Transaction\\Processing};
+        \node[module, fill=dashblue!15] (vm) at (0,-2.5) {Virtual Machine\\(Smart Contracts)};
+        \node[module, fill=ltcgray!30] (store) at (4.5,-2.5) {Storage\\Module};
+        \node[module, fill=red!10] (crypto) at (9,-2.5) {Cryptographic\\Primitives};
+
+        \draw[arrow] (net) -- (con);
+        \draw[arrow] (con) -- (tx);
+        \draw[arrow] (tx) -- (vm);
+        \draw[arrow] (vm) -- (store);
+        \draw[arrow] (tx) -- (store);
+        \draw[arrow] (crypto) -- (net);
+        \draw[arrow] (crypto) -- (con);
+        \draw[arrow] (crypto) -- (tx);
+    \end{tikzpicture}
+    \caption{Логічна декомпозиція модулів блокчейн-системи}
+    \label{fig:modules}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {X[2.5,l] X[1,c] X[1,c] X[1,c] X[1,c] X[1,c]},
+            hlines, vlines,
+            row{1} = {bg=ethpurple!20, font=\bfseries\small},
+            column{1} = {font=\small}
+        }
+        Module                   & ETH$\leftrightarrow$BTC & BTC$\leftrightarrow$LTC & BTC$\leftrightarrow$Dash & ETH$\leftrightarrow$NEO & Dash$\leftrightarrow$LTC \\
+        Networking Code          & Partial                 & High                    & High                     & Low                     & High                     \\
+        Consensus                & No                      & No                      & No                       & No                      & No                       \\
+        Transaction Model        & No                      & Yes*                    & Yes*                     & Partial                 & Yes*                     \\
+        Storage (LevelDB)        & Yes                     & Yes                     & Yes                      & Yes                     & Yes                      \\
+        Cryptographic Primitives & Partial                 & Partial                 & Partial                  & Partial                 & Partial                  \\
+    \end{tblr}
+    \caption{Взаємозамінність модулів між системами}
+    \label{tab:interchange}
+    \noindent\small\textit{Примітка:} "Так*"{} означає структурну сумісність із налаштуванням параметрів.
+\end{table}
+
+\subsection{Висновки щодо взаємозамінності}
+
+\subsubsection{Мережевий модуль (код)}
+Bitcoin, Litecoin і Dash мають дуже схожий протокол P2P gossip, оскільки Litecoin і Dash є прямими форками кодової бази 
+Bitcoin. Їхні мережеві рівні є в основному взаємозамінними з незначними змінами параметрів (номери портів, рядки версій 
+протоколу, «магічні байти»).
+
+Ethereum використовує повністю інший стек протоколів (devp2p/RLPx з Kademlia DHT), що робить його мережевий модуль 
+несумісним із системами сімейства Bitcoin. NEO також використовує власну реалізацію P2P, яка відрізняється від усіх 
+перерахованих вище блокчейн систем, тому його мережевий код несумісний ні з Ethereum, так і від Bitcoin.
+
+\subsubsection{Модуль узгодження (консенсусу)}
+
+Модуль консенсусу є \textbf{фундаментально не взаємозамінним} у всіх системах. Механізм консенсусу кожної системи глибоко інтегрований з її структурою блоків, правилами переходу між станами, розподілом винагород і fork-choice algorithms. Наприклад:
+
+\begin{itemize}[nosep]
+    \item Gasper PoS (Ethereum) вимагає validator deposits, slashing conditions та epoch-based finality -- концепцій, яких немає в чистому PoW від Bitcoin.
+    \item dBFT у NEO вимагає фіксованого набору вузлів консенсусу з візантійською згодою, що архітектурно несумісно з будь-якою системою PoW.
+    \item Masternode-based консенсус Dash додає рівень управління, якого немає в інших системах.
+\end{itemize}
+
+\subsubsection{Обробка транзакцій та модель станів}
+Системи на основі UTXO (Bitcoin, Litecoin, Dash) мають структурно схожий формат транзакцій. Обробка транзакцій, наприклад, в Litecoin, 
+в принципі, може бути використана в Bitcoin з невеликим коригуванням викликів хеш-функцій і параметрів серіалізації (serialization parameters). 
+Однак заміна моделі Ethereum, заснованої на рахунках, на модель UTXO (або навпаки) вимагала б повного перепроектування управління станами, взаємодії 
+з VM і самої логіки перевірки транзакцій.
+
+\subsubsection{Модуль сховища}
+Всі п'ять систем використовують LevelDB (або сумісні з ним key-value stores) як базову базу даних. Це чи не єдиний взаємозамінний компонент, оскільки механізм зберігання даних відносно відокремлений від логіки блокчейну. 
+Наприклад, заміна LevelDB на RocksDB є поширеною оптимізацією, яка не впливає на protocol-level behavior.
+
+\subsubsection{Криптографічні примітиви}
+Всі ці системи використовують криптографію на основі еліптичних кривих (secp256k1) для цифрових підписів. Відрізняються використанням різних геш-функцій: 
+Ethereum використовує Keccak-256 (SHA-3), Bitcoin і Litecoin використовують SHA-256 і RIPEMD-160 для адрес, Dash використовує X11, 
+а NEO використовує взагалі власну схему адрес. Заміна однієї геш-функції на іншу технічно можлива, але це порушить всю логіку виведення адрес, 
+перевірки і самого майнінгу блоків.
+
+\subsection{Діаграма сумісності модулів}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+            scale=0.9,
+            system/.style={rectangle, draw, thick, rounded corners, minimum width=2.5cm, minimum height=1cm, align=center},
+            compat/.style={<->, thick, green!60!black, dashed},
+            incompat/.style={<->, thick, red!60, densely dotted},
+            partial/.style={<->, thick, orange, dash dot}
+        ]
+        \node[system, fill=ethpurple!15] (eth) at (0,3) {Ethereum};
+        \node[system, fill=btcorange!15] (btc) at (-4,0) {Bitcoin};
+        \node[system, fill=neogreen!15] (neo) at (4,0) {NEO};
+        \node[system, fill=dashblue!15] (dash) at (-2.5,-3) {Dash};
+        \node[system, fill=ltcgray!30] (ltc) at (2.5,-3) {Litecoin};
+
+        % High compatibility (Bitcoin family)
+        \draw[compat] (btc) -- node[midway, left, font=\scriptsize, text=green!50!black] {High} (dash);
+        \draw[compat] (btc) -- node[midway, above right, font=\scriptsize, text=green!50!black] {High} (ltc);
+        \draw[compat] (dash) -- node[midway, below, font=\scriptsize, text=green!50!black] {High} (ltc);
+
+        % Low compatibility
+        \draw[incompat] (eth) -- node[midway, above left, font=\scriptsize, text=red!70] {Low} (btc);
+        \draw[incompat] (eth) -- node[midway, above right, font=\scriptsize, text=red!70] {Low} (neo);
+
+        % Partial
+        \draw[partial] (neo) -- node[midway, right, font=\scriptsize, text=orange] {Partial} (ltc);
+        \draw[partial] (neo) -- node[midway, below right, font=\scriptsize, text=orange] {Partial} (dash);
+
+        % Legend
+        \begin{scope}[shift={(6.5,3)}]
+            \draw[compat] (0,0) -- (1,0) node[right, font=\scriptsize] {High compatibility};
+            \draw[partial] (0,-0.5) -- (1,-0.5) node[right, font=\scriptsize] {Partial compatibility};
+            \draw[incompat] (0,-1) -- (1,-1) node[right, font=\scriptsize] {Low compatibility};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Сумісність модулів між системами в цілому}
+    \label{fig:compat-graph}
+\end{figure}
+
+\textbf{Основні висновки:}
+\begin{enumerate}[nosep]
+    \item Системи, похідні від однієї кодової бази (Bitcoin $\to$ Litecoin, Bitcoin $\to$ Dash), мають найвищий ступінь взаємозамінності модулів, 
+        особливо в мережому модулі, обробці транзакцій та зберіганні даних.
+    \item Ethereum та NEO, незважаючи на те, що обидві є платформами смарт-контрактів на основі облікових записів, 
+        вони використовують абсолютно різні мережеві стеки, реалізації VM та механізми консенсусу, що робить прямий 
+        обмін модулями непрактичним.
+    \item \textbf{Рівень зберігання даних} (LevelDB/RocksDB) є найбільш взаємозамінним компонентом, оскільки він працює 
+        нижче рівня самого протоколу обміну даними.
+    \item \textbf{Модулі консенсусу не є безпосередньо взаємозамінними(!)}. Між будь-якою парою систем через тісний 
+        зв'язок із структурою блоків, переходами станів та дизайном економічних стимулів.
+\end{enumerate}
