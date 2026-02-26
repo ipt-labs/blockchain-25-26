@@ -297,7 +297,7 @@ Uniswap це найбільша децентралізована біржа (DEX
 \end{figure}
 
 
-\subsection{Core Smart Contracts (Layer 2)}
+\subsection{Core Smart Contracts (Рівень 2)}
 
 За рівень 1, як працює блокчейн з протоколами консенсусу, ми говорили в попердніх лабораторних, тому одразу перейдемо 
 і зосередимося на рівні 2. "Серце"{} Uniswap v3 складається з двох основних контрактів~\cite{uniswap_v3_whitepaper}:
@@ -342,7 +342,7 @@ function swap(
 Модифікатор \texttt{noDelegateCall} є механізмом безпеки, що гарантує неможливість виконання pool's logic за 
 допомогою \texttt{DELEGATECALL} із зовнішнього контракту, який міг би маніпулювати контекстом зберігання.
 
-\subsection{Router and Periphery Contracts (Layer 3)}
+\subsection{Router and Periphery Contracts (Рівень 3)}
 
 Користувачі не взаємодіють безпосередньо з контрактами. Натомість вони направляють транзакції через периферійні контракти:
 
@@ -355,7 +355,7 @@ function swap(
 \textbf{Permit2} -- це менеджер затвердження токенів, який замінює застарілу модель ERC-20 \texttt{approve} на дозволи 
 на основі підпису, з обмеженим терміном дії та обмеженою сумою~\cite{uniswap_docs}.
 
-\subsection{Off-Chain Components (Layers 4--5)}
+\subsection{Off-Chain Components (Рівні 4--5)}
 
 Auto Router -- це позаланцюговий алгоритм, який обчислює оптимальний маршрут обміну між усіма пулами Uniswap і рівнями 
 комісій, а також між ліквідністю v2 і v3. Він використовує індексатор підграфіків (The Graph) для запиту поточного 
@@ -365,3 +365,269 @@ Auto Router -- це позаланцюговий алгоритм, який об
 Важливо (!) -- фронтенд обробляє підключення гаманця, побудову параметрів транзакції та потік підписання користувача. 
 Будь-яке порушення цього рівня дозволяє зловмиснику змінювати параметри транзакції до підписання користувачем, ефективно 
 викрадаючи кошти, незважаючи на безпеку самих смарт-контрактів.
+
+\section{OWASP Smart Contract Top 10}
+\label{sec:sc_top10}
+
+Recognizing the unique security challenges of blockchain applications, the OWASP community developed the Smart Contract Top~10 (SC Top~10), most recently updated in 2025~\cite{owasp_scstop10}. This classification complements the traditional Top~10 by addressing risks specific to on-chain code execution. Table~\ref{tab:sc_top10} presents the complete list with severity ratings and cross-references to the SWC Registry~\cite{swc_registry}.
+
+Визнаючи унікальність викликів безпеки, пов'язані з блокчейн-додатками, спільнота OWASP прийшла до того, що розробила 
+рейтинг Smart Contract Top 10 (SC Top~10), який востаннє оновлювався у 2025 році~\cite{owasp_scstop10}. Ця класифікація 
+доповнює традиційний рейтинг Top 10, враховуючи ризики, характерні для виконання коду в блокчейні. 
+У таблиці~\ref{tab:sc_top10} наведу повний перелік із рейтингами серйозності та перехресними посиланнями на 
+реєстр SWC~\cite{swc_registry}.
+
+\begin{table}[H]
+    \centering
+    \begin{tblr}{
+            colspec = {Q[c,m,0.08\linewidth] Q[l,m,0.42\linewidth] Q[c,m,0.14\linewidth] Q[c,m,0.18\linewidth]},
+            row{1} = {font=\sffamily\bfseries, bg=dappBlue!15},
+            hlines,
+            vlines,
+            rows = {m},
+        }
+        Ранг & Категорія вразливості                         & Серйозність & SWC ref.code     \\
+        SC01 & Атаки повторного входу (Reentrancy attacks)   & Критична    & SWC-107          \\
+        SC02 & Integer Overflow and Underflow                & Висока      & SWC-101          \\
+        SC03 & Залежність від часової мітки                  & Середня     & SWC-116          \\
+        SC04 & Вразливості контролю доступу                  & Критична    & SWC-105, SWC-106 \\
+        SC05 & Атаки з випередженням (MEV)                   & Висока      & SWC-114          \\
+        SC06 & Атаки типу "відмова в обслуговуванні"{} (DoS) & Висока      & SWC-113, SWC-128 \\
+        SC07 & Логічні помилки                               & Високий     & SWC-110          \\
+        SC08 & Insecure Randomness                           & Середній    & SWC-120          \\
+        SC09 & Вразливості газового ліміту                   & Середній    & SWC-126, SWC-128 \\
+        SC10 & Неперевірені зовнішні виклики                 & Високий     & SWC-104          \\
+    \end{tblr}
+    \caption{OWASP Smart Contract Top 10 (2025 edition)}
+    \label{tab:sc_top10}
+\end{table}
+
+\subsection{SC01: Reentrancy Attacks}
+
+Повторне входження -- це найвідоміша вразливість смарт-контрактів, яка стала причиною хакерської атаки на 
+DAO у 2016 році, що призвела до втрати приблизно 3,6 мільйона ETH. Вона виникає, коли контракт здійснює зовнішній 
+виклик до ненадійної адреси перед оновленням власного стану, що дозволяє стороні, яка отримує виклик, рекурсивно 
+повертатися до вразливої функції~\cite{ethereum_reentrancy, atzei2017survey}.
+
+Існує три основні варіанти. \textit{Single-function reentrancy}: зловмисник повторно викликає в ту саму функцію 
+до завершення оновлення її стану. \textit{Cross-function reentrancy}: зловмисник викликає іншу функцію, яка має 
+спільний стан з функцією, що була викликана спочатку. \textit{Cross-contract reentrancy}: зловмисник використовує 
+спільний стан декількох контрактів у протоколі.
+
+Стандартним захистом є шаблон "Checks-Effects-Interactions"{} (CEI):
+
+\begin{minted}{solidity}
+// SAFE: Checks-Effects-Interactions pattern
+function withdraw(uint256 amount) external {
+    require(balances[msg.sender] >= amount);  // Check
+    balances[msg.sender] -= amount;            // Effect
+    (bool ok, ) = msg.sender.call{value: amount}(""); // Interaction
+    require(ok);
+}
+\end{minted}
+
+Крім того, OpenZeppelin's \texttt{ReentrancyGuard} забезпечує механізм захисту на основі м'ютексів за допомогою 
+модифікатора \texttt{nonReentrant}~\cite{openzeppelin_contracts} (якась дуже заморочлива штука).
+
+\subsection{SC04: Access Control Vulnerabilities}
+
+Неправильний контроль доступу в смарт-контрактах проявляється у вигляді: відсутніх або неправильних специфікаторів 
+видимості функцій (\texttt{public} vs \texttt{external} vs \texttt{internal}), неможливості обмежити адміністративні 
+функції за допомогою \texttt{onlyOwner} або модифікаторів на основі ролей, а також небезпечного використання 
+\texttt{tx.origin} замість \texttt{msg.sender} для авторизації~\cite{swc_registry}.
+
+Критичною відмінністю контролю доступу в блокчейні є те, що після розгортання контракту його логіка контролю 
+доступу є незмінною. Якщо адміністративна функція не має належних обмежень, її може викликати будь-хто, і це 
+неможливо виправити без розгортання нової версії контракту (що коштуватиме додаткові витрати).
+
+\subsection{SC05: Front-Running and MEV}
+
+Максимальна екстрагована вартість (Maximal Extractable Value, MEV), раніше, так звана, "Miner Extractable Value"{}, 
+означає прибуток, який майнери можуть отримати шляхом включення, виключення або переупорядкування транзакцій у 
+блоках, які вони виробляють~\cite{daian2020flash}. У контексті DEX найпоширенішими стратегіями MEV є:
+
+\textit{Sandwich attacks}: аналітик виявляє очікуваний обмін у mempool, розміщує перед ним замовлення на купівлю 
+(front-run) і після нього замовлення на продаж (back-run), отримуючи прибуток від впливу на ціну транзакції жертви.
+
+\textit{Just-in-Time (JIT) liquidity}: аналітик забезпечує концентровану ліквідність безпосередньо перед великим 
+swap і вилучає її в тому ж блоці після цього, отримуючи комісію за swap.
+
+\textit{Arbitrage}: атомарний арбітраж між декількома пулами або протоколами DEX для вирівнювання цін.
+
+Концентрована модель ліквідності Uniswap збільшує можливості MEV, оскільки вплив свопів на ціну є досить передбачуваним, враховуючи відомий розподіл цінових кроків.
+
+\section{Співставлення вимог OWASP з безпекою Uniswap}
+\label{sec:mapping}
+
+This section systematically maps each OWASP Top~10:2021 category to its manifestation within the Uniswap architecture. For each category, the analysis identifies the affected Uniswap layer(s), describes concrete attack scenarios, and references real-world incidents where applicable.
+
+Figure~\ref{fig:threat_map} provides a high-level threat mapping visualization across Uniswap's architectural layers.
+
+Тут я б хотів детально співставити кожну категорію безпеки OWASP Top~10:2021 та її прояв в архітектурі Uniswap. 
+Для кожної категорії визначимо рівні Uniswap, які будуть зачеплені і опишемо конкретні сценарії атак та додам 
+посилання на реальні випадки інцидентів.
+
+На рисунку~\ref{fig:threat_map} наведено візуалізацію high-level загроз у архітектурних рівнях Uniswap.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        box/.style={draw, rounded corners=3pt, minimum width=3.8cm,
+                minimum height=1.2cm, font=\sffamily\small, align=center,
+                inner sep=4pt},
+        threat/.style={draw, rounded corners=3pt, minimum width=3.4cm,
+                minimum height=0.7cm, font=\sffamily\scriptsize, align=center,
+                fill=critRed!12, draw=critRed!50, text width=3.2cm},
+        conn/.style={-{Stealth[length=4pt]}, thick, critRed!60},
+        node distance=0.25cm
+        ]
+        % Uniswap layers
+        \node[box, fill=uniPink!15, draw=uniPink!60] (fe) {Front-End\\(Layer 5)};
+        \node[box, fill=dappBlue!12, draw=dappBlue!50, right=2.5cm of fe] (api) {Off-Chain API\\(Layer 4)};
+        \node[box, fill=secGreen!12, draw=secGreen!50, below=1.8cm of fe] (sc) {Smart Contracts\\(Layers 2--3)};
+        \node[box, fill=gray!12, draw=gray!50, right=2.5cm of sc] (chain) {Blockchain\\(Layer 1)};
+
+        % Threats
+        \node[threat, above=0.4cm of fe] (t1) {A01, A03, A05\\A07, A08};
+        \node[threat, above=0.4cm of api] (t2) {A04, A06\\A09, A10};
+        \node[threat, below=0.4cm of sc] (t3) {SC01, SC02, SC04\\SC05, SC07};
+        \node[threat, below=0.4cm of chain] (t4) {SC03, SC05\\SC06, SC08};
+
+        % Connections
+        \draw[conn] (t1) -- (fe);
+        \draw[conn] (t2) -- (api);
+        \draw[conn] (t3) -- (sc);
+        \draw[conn] (t4) -- (chain);
+
+        % Cross-layer threats
+        \draw[conn, dashed, gray] (fe) -- (api);
+        \draw[conn, dashed, gray] (api) -- (sc);
+        \draw[conn, dashed, gray] (sc) -- (chain);
+    \end{tikzpicture}
+    \caption{Threat category mapping across Uniswap's architectural layers.}
+    \label{fig:threat_map}
+\end{figure}
+
+\subsection{A01 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Контроль рівневого доступу}
+
+\textbf{Рівень смарт-контрактів.} Основні контракти Uniswap v3 реалізують контроль доступу через Factory's \texttt{owner} address 
+(яка контролює створення комісійних рівнів та встановлення комісій протоколу), модифікатор \texttt{noDelegateCall} пулу та право 
+власності PositionManager на кожну позицію через NFT. Важливою властивістю безпеки є те, що \textit{жодна окрема адреса не може 
+призупинити торгівлю або заморозити кошти користувачів} -- протокол розроблений як безопіковий (non-custodial).
+
+\textbf{Рівень інтерфейсу.} Веб-інтерфейс забезпечує контроль доступу через стан підключення гаманця. Однак, на відміну 
+від контролю доступу на стороні сервера, всі перевірки інтерфейсу можна обійти, безпосередньо взаємодіючи зі смарт-контрактами. 
+Тому контроль доступу на рівні інтерфейсу служить лише як захисний бар'єр для користувача, а не як обмеження безпеки.
+
+\textbf{Рівень управління.} Токен управління UNI контролює адміністративні дії на рівні протоколу за допомогою контракту 
+з таймлоком. Тільки пропозиції, які пройшли голосування кворумом, можуть виконувати привілейовані функції після обов'язкового 
+періоду затримки~\cite{uniswap_governance}.
+
+\subsection{A02 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Криптографічні залежності}
+
+Uniswap використовує криптографічну інфраструктуру Ethereum для автентифікації транзакцій (\texttt{secp256k1} ECDSA-підписи) 
+та походження адрес (\texttt{keccak256} гешування). Система Permit2 додає додатковий криптографічний рівень: EIP-712 
+типізовані підписи даних, які авторизують передачу токенів без необхідності затвердження транзакцій в ланцюжку~\cite{uniswap_docs}.
+
+Сценарій криптографічної помилки, характерний для Uniswap, полягає в наступному: якщо приватний ключ користувача скомпрометований 
+(через фішинг, шкідливе програмне забезпечення або слабку ентропію під час генерації ключа), зловмисник може підписувати 
+довільні транзакції обміну, вичерпувати позиції ліквідності (які є NFT) та скасовувати дозволи Permit2. Тому потік 
+підключення гаманця фронтенду повинен забезпечувати безпечні канали зв'язку (HTTPS, відсутність відкритого тексту ключа) 
+та підтримувати підписання апаратного гаманця.
+
+\subsection{A03 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Injection Vectors}
+
+\textbf{Традиційний Injection (фронтенд).} Фронтенд на базі React обробляє введені користувачем дані, включаючи адреси токенів, 
+суми обміну та налаштування проковзування (slippage). Вразливості XSS можуть дозволити зловмиснику ввести шкідливі 
+скрипти, які змінюватимуть параметри транзакції перед підписанням. Наприклад, замінити адресу одержувача в даних 
+виклику \texttt{swapExactTokensForTokens}.
+
+\textbf{Впровадження смарт-контракту (on-chain).} Функція обміну Uniswap v3 приймає параметр \texttt{bytes calldata data}, 
+який використовується для зворотних викликів флеш-обміну. Зловмисний контракт може створити дані зворотного виклику, які 
+використовують несподівану логіку аналізу. Uniswap пом'якшує цю проблему, перевіряючи зворотний виклик на відповідність 
+очікуваній адресі пулу.
+
+\subsection{A04 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Design-Level Security}
+
+Дизайн Uniswap-у включає в себе кілька принципів безпеки за замовчуванням~\cite{uniswap_v3_whitepaper}:
+
+\textit{Неможливість оновлення}: основні контракти є незмінними, що виключає вектори атак, пов'язані з оновленням, 
+але вимагає повної міграції для виправлення помилок. \textit{Мінімальна поверхня управління}: можна управляти тільки 
+рівнями комісій та відсотками комісій протоколу; основна логіка обміну не може бути змінена. \textit{Детермінований розгортання пулу}: 
+\texttt{CREATE2} гарантує, що адреси пулу є передбачуваними і не можуть бути підроблені. \textit{Oracle design}: 
+вбудований TWAP (Time-Weighted Average Price) Oracle використовує геометричне середнє за накопиченими ціновими змінами, 
+що робить його стійкішим до маніпуляцій з одним блоком. Однак така конструкція також несе в собі певні ризики: 
+концентрація ліквідності створює непередбачуваність по вартості газу при перетині тіків, а комбінованість 
+протоколу (інші контракти, побудовані, що на базі пулів Uniswap) розширює поверхню атаки за межі того, що 
+безпосередньо контролюють розробники Uniswap.
+
+\subsection{A05 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Конфігураційні ризики}
+
+\textbf{Front-end інфраструктура.} Розгортання app.uniswap.org залежить від конфігурації DNS, налаштувань CDN та сертифікатів TLS. 
+У липні 2022 року атака з "отруєнням"{} кешу (cache poisoning) DNS перенаправила користувачів на фішинговий сайт, який вимагав 
+затвердження гаманця для зловмисного контракту~\cite{uniswap_dns_attack}. Цей інцидент продемонстрував, що навіть ідеально захищений 
+рівень смарт-контрактів не може захистити користувачів, якщо інфраструктура доставки фронтенду скомпрометована.
+
+\textbf{Конфігурація RPC.} Фронтенд спілкується з Ethereum через провайдерів RPC (Infura, Alchemy або інші вузли, що налаштовані користувачем). 
+Неправильно налаштована або скомпрометована кінцева точка RPC може повернути сфальсифікований стан блокчейну, що призведе до відображення 
+фронтендом неправильних цін, балансів і/або статусів транзакцій.
+
+\textbf{Конфігурація списку токенів.} Uniswap використовує упорядковані списки токенів для відображення токенів в інтерфейсі. 
+Неправильна конфігурація управління списком токенів може призвести до включення шахрайських токенів або підробки легітимних 
+токенів з подібними назвами/символами.
+
+\subsection{A06 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Dependency ризики}
+
+Фронтенд Uniswap використовує стандартний стек JavaScript/TypeScript із сотнями додаткових npm залежностей. Кожна 
+залежність представляє потенційний вектор атаки на ланцюжок постачання. SDK протоколу (\texttt{@uniswap/v3-sdk}, 
+\texttt{@uniswap/smart-order-router}) сам по собі є залежністю, яку використовують багато інших додатків.
+
+На рівні смарт-контрактів Uniswap v3 використовує мінімальні зовнішні залежності, але протоколи, що інтегрують Uniswap pools 
+(такі як цінові оракули або джерела ліквідності), створюють непрямі ланцюжки залежностей. Вразливість в інтегруючому 
+протоколі може мати каскадний ефект і вплинути на стан пулу самого Uniswap.
+
+\subsection{A07 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Автетифікаційна модель}
+
+Автентифікація Uniswap повністю базується на викорастанні гаманця (wallet-based). Користувачі входять у систему, 
+підключаючи гаманець (MetaMask, WalletConnect, Coinbase Wallet тощо) і автентифікують кожну дію, криптографічно підписуючи 
+транзакції. Ця модель усуває традиційні вразливості автентифікації (повторне використання паролів, наповнення облікових даних, 
+перехоплення сеансів), але вносить ризики, пов'язані з гаманцем:
+
+\textit{Phishing wallet connections}: зловмисні dApps можуть запитувати широкі дозволи. \textit{Blind signing}: 
+користувачі підписують транзакції, не розуміючи даних виклику. \textit{Approval hijacking}: необмежені затвердження ERC-20 
+дозволяють скомпрометованому учаснику нескінечнно викачувати токени~\cite{erc20_standard}. Використовуючи систему Permit2 
+Uniswap безпосередньо вирішує проблему затверджень, застосовуючи терміни дії та обмеження суми дозволів на токени.
+
+\subsection{A08 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Цілісність передачі коду}
+
+The integrity of Uniswap's front-end code is a critical security requirement. The deployment pipeline must ensure that the JavaScript/HTML/CSS bundle served to users matches the audited source code in the public GitHub repository. Uniswap addresses this through IPFS pinning of front-end builds (creating a content-addressed, tamper-evident deployment) and maintaining an ENS (Ethereum Name Service) record pointing to the IPFS hash.
+
+However, most users access Uniswap through the traditional DNS-based URL (app.uniswap.org) rather than the IPFS/ENS gateway, reintroducing centralized integrity risks. Subresource Integrity (SRI) tags and strict CSP headers are essential mitigations at this layer.
+
+Цілісність Uniswap's front-end code є критично важливою вимогою безпеки. Процес розгортання повинен гарантувати, що 
+пакет JavaScript/HTML/CSS, який надається користувачам, відповідає перевіреному вихідному коду в публічному репозиторії 
+GitHub. Uniswap вирішує цю проблему за допомогою прив'язки IPFS до фронтенд-збірок (створення розгортання з адресованим 
+вмістом, що захищене від несанкціонованого втручання) та підтримки записів ENS (Ethereum Name Service), що вказує 
+на хеш IPFS.
+
+Однак більшість користувачів отримують доступ до Uniswap через традиційний URL на основі DNS (app.uniswap.org), а не 
+через шлюз IPFS/ENS, що знову створює ризики централізованої цілісності. Теги Subresource Integrity (SRI) та суворі 
+заголовки CSP є необхідними засобами захисту на цьому рівні.
+
+\subsection{A09 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Відстеження та реагування на інциденти}
+
+Активність в блочному ланцюгу (on-chain) за своєю суттю логується і підлягає аудиту. Кожен обмін, подія з ліквідністю та дія 
+з управління генерує \texttt{event} в журналі Solidity, які постійно записуються в блокчейн. Такі інструменти, як 
+The Graph, індексують ці події для ефективного пошуку, а такі сервіси, як Forta Network, Tenderly та OpenZeppelin 
+Defender, забезпечують моніторинг у реальному часі з функціями оповіщення.
+
+Однак виявлення інцидентів поза ланцюгом залишається складним завданням. Атаки на DNS, компрометація фронтенду та 
+маніпуляції з RPC можуть не залишати слідів у ланцюжку, поки кошти не будуть вкрадені. Uniswap пом'якшує цю проблему 
+за допомогою програми винагороди за виявлення багів, яка пропонує до 15,5 мільйонів доларів за критичні вразливості~\cite{uniswap_bug_bounty}.
+
+\subsection{A10 \texorpdfstring{$\rightarrow$}{rightarrow} Uniswap: Підробка запитів на стороні сервера (SSRF) в Off-Chain сервісах}
+
+Автоматичний маршрутизатор Uniswap-у отримує дані про стан пулу з кінцевих точок підграфа The Graph і може запитувати 
+зовнішні URI (Uniform Resource Identifier) метаданих токенів (для іконок і описів токенів ERC-20). Якщо служба маршрутизації 
+не перевіряє URI належним чином, зловмисник може створити зловмисний токен з URI метаданих, що вказує на внутрішню інфраструктуру, 
+потенційно розкриваючи приватні кінцеві точки API або внутрішню топологію мережі.
