@@ -1,0 +1,420 @@
+\section{Розробка власного смарт-контракту Ethereum}
+
+Ще було бажання зробити завдання по розробці якогось смарт-контракту. Обрав \textbf{TodoList} -- це буде децентралізований 
+менеджер завдань, розгорнутий на блокчейні Ethereum.
+
+\subsection{Загальна концепція і вимоги}
+
+Його ідея полягає в тому, що кожен користувач (адреса Ethereum) веде власний приватний список завдань. Контракт 
+демонструватиме такі функції Solidity:
+
+\begin{itemize}
+    \item \texttt{enum} --- для моделювання пріоритетності та статусу завдань.
+    \item \texttt{struct} --- для групування завдань.
+    \item \texttt{mapping} with nested dynamic arrays --- зберігання завдань для кожного користувача.
+    \item \texttt{events} --- для позаланцюгового індексування змін стану.
+    \item Access control --- кожен користувач може керувати лише своїми завданнями.
+\end{itemize}
+
+\noindent Вимоги до смарт-контракту:
+\begin{enumerate}
+    \item Створення завдання з назвою, описом та рівнем пріоритетності.
+    \item Можливість позначити завдання як виконане.
+    \item Можливість видалити завдання.
+    \item Obtain одне завдання або всі завдання для користувача.
+    \item Відстежувати статистику завдань (загальна кількість, виконані, очікують виконання) для кожного користувача.
+\end{enumerate}
+
+\subsection{Проектування контракту}
+
+\subsubsection{Data Model}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.4cm,
+    every node/.style={font=\small},
+    title/.style={
+        rectangle, draw, fill=blue!15, font=\small\bfseries,
+        minimum width=5cm, minimum height=0.7cm, anchor=north
+    },
+    field/.style={
+        rectangle, draw, fill=white,
+        minimum width=5cm, minimum height=0.6cm, anchor=north,
+        font=\small\ttfamily
+    },
+    enumbox/.style={
+        rectangle, draw, fill=green!10, font=\small\bfseries,
+        minimum width=3.5cm, minimum height=0.7cm, anchor=north
+    },
+    enumval/.style={
+        rectangle, draw, fill=white,
+        minimum width=3.5cm, minimum height=0.6cm, anchor=north,
+        font=\small\ttfamily
+    },
+]
+    % Task struct
+    \node[title] (st) {struct Task};
+    \node[field, below=0pt of st] (f1) {uint256 id};
+    \node[field, below=0pt of f1] (f2) {string title};
+    \node[field, below=0pt of f2] (f3) {string description};
+    \node[field, below=0pt of f3] (f4) {Priority priority};
+    \node[field, below=0pt of f4] (f5) {bool completed};
+    \node[field, below=0pt of f5] (f6) {uint256 createdAt};
+
+    % Priority enum
+    \node[enumbox, right=2.5cm of st] (ep) {enum Priority};
+    \node[enumval, below=0pt of ep] (e1) {Low = 0};
+    \node[enumval, below=0pt of e1] (e2) {Medium = 1};
+    \node[enumval, below=0pt of e2] (e3) {High = 2};
+
+    % Mapping
+    \node[title, below=1.5cm of f6, minimum width=7cm] (mp) {Storage Layout};
+    \node[field, below=0pt of mp, minimum width=7cm] (m1) {mapping(address => Task[]) tasks};
+    \node[field, below=0pt of m1, minimum width=7cm] (m2) {mapping(address => uint256) taskCount};
+
+    % Arrow
+    \draw[-{Stealth}, thick, gray] (f4.east) -- ++(0.5,0) |- (e2.west);
+\end{tikzpicture}
+\caption{TodoList contract data model.}
+\label{fig:todo-model}
+\end{figure}
+
+\subsubsection{Опис функцій контракту}
+
+\begin{tblr}{
+    colspec = {Q[font=\ttfamily, m, 120pt]Q[c, m, 55pt]X[l, m]},
+    row{1} = {font=\bfseries, bg=gray!15, c},
+    hlines, vlines,
+    width = \textwidth,
+    measure = vbox,
+    }
+    Функція          & Тип   & Опис                                                                                                                         \\
+    createTask()     & write & Створює нове завдання з назвою, описом та рівнем пріоритетності. Видає подію \texttt{TaskCreated}.                           \\
+    toggleComplete() & write & Змінює статус виконання завдання. Видає подію \texttt{TaskToggled}.                                                          \\
+    deleteTask()     & write & Видаляє завдання шляхом обміну його з останнім елементом з масиву і робить pop(). Видає подію \texttt{TaskDeleted}. \\
+    getTask()        & view  & Повертає одне завдання за його індексом. (gas free)                                                                          \\
+    getMyTasks()     & view  & Повертає всі завдання від поточного користувача. (gas free)                                                                  \\
+    getStats()       & view  & Повертає загальну кількість завдань, виконаних та невиконаних. (gas free)                                                    \\
+\end{tblr}
+
+\subsection{Source Code смарт-контракту}
+\label{sec:todo-code}
+
+\begin{minted}{solidity}
+    // SPDX-License-Identifier: GPL-3.0
+    pragma solidity >=0.7.0 <0.9.0;
+
+    /// @title TodoList - Decentralised task manager
+    /// @notice Each Ethereum address manages its own private task list
+    contract TodoList {
+
+        // --- Enums ---
+        enum Priority { Low, Medium, High }
+
+        // --- Structs ---
+        struct Task {
+            uint256 id;          // Unique task ID (per user)
+            string title;        // Task title
+            string description;  // Task description
+            Priority priority;   // Low=0, Medium=1, High=2
+            bool completed;      // Completion status
+            uint256 createdAt;   // Block timestamp at creation
+        }
+
+        // --- State Variables ---
+        mapping(address => Task[]) private tasks;
+        mapping(address => uint256) private taskCounter;
+
+        // --- Events ---
+        event TaskCreated(
+            address indexed owner,
+            uint256 indexed taskId,
+            string title,
+            Priority priority
+        );
+        event TaskToggled(
+            address indexed owner,
+            uint256 indexed taskId,
+            bool completed
+        );
+        event TaskDeleted(
+            address indexed owner,
+            uint256 indexed taskId
+        );
+
+        // --- Modifiers ---
+        modifier validIndex(uint256 _index) {
+            require(
+                _index < tasks[msg.sender].length,
+                "Task index out of bounds"
+            );
+            _;
+        }
+
+        // --- Write Functions ---
+
+        /// @notice Create a new task
+        /// @param _title Short task title
+        /// @param _description Detailed description
+        /// @param _priority Priority level (0=Low, 1=Medium, 2=High)
+        function createTask(
+            string calldata _title,
+            string calldata _description,
+            Priority _priority
+        ) external {
+            uint256 newId = taskCounter[msg.sender];
+
+            tasks[msg.sender].push(Task({
+                id: newId,
+                title: _title,
+                description: _description,
+                priority: _priority,
+                completed: false,
+                createdAt: block.timestamp
+            }));
+
+            taskCounter[msg.sender]++;
+            emit TaskCreated(msg.sender, newId, _title, _priority);
+        }
+
+        /// @notice Toggle the completion status of a task
+        /// @param _index Array index of the task
+        function toggleComplete(uint256 _index)
+            external
+            validIndex(_index)
+        {
+            Task storage task = tasks[msg.sender][_index];
+            task.completed = !task.completed;
+            emit TaskToggled(msg.sender, task.id, task.completed);
+        }
+
+        /// @notice Delete a task (swap-and-pop for gas efficiency)
+        /// @param _index Array index of the task to delete
+        function deleteTask(uint256 _index)
+            external
+            validIndex(_index)
+        {
+            Task[] storage userTasks = tasks[msg.sender];
+            uint256 deletedId = userTasks[_index].id;
+
+            // Swap with last element, then remove last
+            uint256 lastIndex = userTasks.length - 1;
+            if (_index != lastIndex) {
+                userTasks[_index] = userTasks[lastIndex];
+            }
+            userTasks.pop();
+
+            emit TaskDeleted(msg.sender, deletedId);
+        }
+
+        // --- View Functions (free to call) ---
+
+        /// @notice Get a single task by index
+        function getTask(uint256 _index)
+            external
+            view
+            validIndex(_index)
+            returns (Task memory)
+        {
+            return tasks[msg.sender][_index];
+        }
+
+        /// @notice Get all tasks for the caller
+        function getMyTasks()
+            external
+            view
+            returns (Task[] memory)
+        {
+            return tasks[msg.sender];
+        }
+
+        /// @notice Get task statistics for the caller
+        /// @return total Number of active tasks
+        /// @return completed Number of completed tasks
+        /// @return pending Number of pending tasks
+        function getStats()
+            external
+            view
+            returns (
+                uint256 total,
+                uint256 completed,
+                uint256 pending
+            )
+        {
+            Task[] storage userTasks = tasks[msg.sender];
+            total = userTasks.length;
+
+            for (uint256 i = 0; i < total;) {
+                if (userTasks[i].completed) {
+                    completed++;
+                }
+                unchecked { i++; }
+            }
+            pending = total - completed;
+        }
+    }
+\end{minted}
+
+\subsection{Огляд ключових аспектів реалізації}
+
+\subsubsection{Enum: \texttt{Priority}}
+
+Enums \texttt{Priority} визначає три рівня: \texttt{Low}~(0), \texttt{Medium}~(1), і \texttt{High}~(2). Enums 
+внутрішньо зберігаються як \texttt{uint8}, займаючи мало місця. В Remix, ми передаватимемо чисельне значення (наприклад, \texttt{2} for \texttt{High}).
+
+\subsubsection{Struct: \texttt{Task}}
+
+Кожен таск має шість полів. Поля типу \texttt{string} (\texttt{title}, \texttt{description}) використовують динамічне сховище, 
+що є дорогим порівняно з фіксованими типами, але необхідне для читабельного контенту. Поле \texttt{createdAt} використовує 
+\texttt{block.timestamp}, записуючи Unix timestamp блоку, в якому був створений таск.
+
+\subsubsection{Storage: per-user isolation}
+
+\texttt{mapping(address => Task[])} гарантуватиме, що кожна адреса Ethereum має власний незалежний масив завдань. 
+Користувач~A не може зчитувати або змінювати завдання користувача~B. Видимість \texttt{private} запобігає прямому 
+доступу інших контрактів до mapping, хоча дані все ще можна зчитувати поза ланцюгом (off-chain) via storage inspection.
+
+\subsubsection{Modifier: \texttt{validIndex}}
+
+Цей кастомний модифікатор перевірятиме, чи наданий індекс знаходиться в межах масиву завдань виклику. Він повторно використовується 
+функціями \texttt{toggleComplete()}, \texttt{deleteTask()} та \\ \texttt{getTask()}, відповідно до принципу DRY 
+(Don't Repeat Yourself) для зменшення розміру байт-коду.
+
+\subsubsection{Delete pattern: swap-and-pop}
+
+Видалення з середини динамічного масиву Solidity є дуже дорогим, оскільки вимагає зсуву всіх наступних елементів. Шаблон 
+\emph{swap-and-pop} дозволяє цього уникнути: елемент, який потрібно видалити, перезаписується останнім елементом, а потім 
+останній елемент видаляється за допомогою \texttt{pop()}. Це зменшує кількість газу до $O(1)$ незалежно від розміру масиву, 
+але не зберігає порядок елементів. У нашому випадку порядок завдань не є критичним, тому це прийнятний компроміс.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        every node/.style={font=\small},
+        cell/.style={
+            rectangle, draw, minimum width=1.5cm, minimum height=0.8cm, anchor=west
+        },
+        arr/.style={-{Stealth[length=2.5mm]}, thick}
+    ]
+        % Before
+        \node[font=\bfseries] at (-1.5, 0) {Before:};
+        \node[cell, fill=red!20] (a0) at (0.5, 0) {Task0};
+        \node[cell, fill=yellow!20, right=0pt of a0] (a1) {Task1};
+        \node[cell, fill=green!20, right=0pt of a1] (a2) {Task2};
+
+        % Arrow label
+        \node at (4.5, -0.7) {\textit{delete index 0}};
+        \draw[arr] (4.5, -0.9) -- (4.5, -1.5);
+
+        % After swap
+        \node[font=\bfseries] at (-1.5, -2) {Swap:};
+        \node[cell, fill=green!20] (b0) at (0.5, -2) {Task2};
+        \node[cell, fill=yellow!20, right=0pt of b0] (b1) {Task1};
+        \node[cell, fill=green!15, dashed, right=0pt of b1] (b2) {Task2};
+
+        % After pop
+        \node[font=\bfseries] at (-1.5, -3.5) {Pop:};
+        \node[cell, fill=green!20] (c0) at (0.5, -3.5) {Task2};
+        \node[cell, fill=yellow!20, right=0pt of c0] (c1) {Task1};
+    \end{tikzpicture}
+    \caption{Swap-and-pop deletion pattern: $O(1)$ gas cost.}
+    \label{fig:swap-pop}
+\end{figure}
+
+\subsubsection{Застосовні оптимізації по газу}
+
+\begin{tblr}{
+        colspec = {c X},
+        row{1} = {font=\bfseries, bg=gray!15, c},
+        hlines, vlines,
+        width = \textwidth,
+        measure = vbox,
+    }
+    \No & Оптимізація                                                                      \\
+    1   & \texttt{external} видимість для всіх публічних функцій (здешевлення виклику).    \\
+    2   & \texttt{calldata} для рядкових параметрів (уникнення копіювання пам'яті).        \\
+    3   & \texttt{unchecked} ітератор циклу \texttt{getStats()} (без ризику переповнення). \\
+    4   & Swap-and-pop для видалення за $O(1)$ замість зсуву за $O(n)$ гасу.               \\
+    5   & Події для відстеження поза ланцюгом замість додаткових змінних зберігання.       \\
+    6   & Кастомний модифікатор для зменшення дублювання коду (менший байт-код).           \\
+\end{tblr}
+
+\subsection{Деплоймент і тестування контракту}
+
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=2em]
+    \item \textbf{Створюємо новий файл} в Remix у папці contracts: \texttt{TodoList.sol}. Додаємо в нього код 
+        з розділу~\ref{sec:todo-code}.
+    \item \textbf{Компілюємо}, як і раніше, з Solidity \texttt{0.8.21}, з увімкненою оптимізацією (200 runs).
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen6.png}
+            \caption{Compilation settings in Remix IDE}
+            \label{fig:screen6}
+        \end{figure}
+    \item \textbf{Deploy} via Injected Provider (MetaMask, Sepolia). Контруктор не потребує вхідних аргументів (порівняно з 
+        завданням 1) --- просто натискаємо \textbf{Deploy} і підтверджуємо в MetaMask.
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen7.png}
+            \caption{Deployment result in Remix IDE}
+            \label{fig:screen7}
+        \end{figure}
+    \item \textbf{Тестимо роботу:}
+        \begin{enumerate}[label=\alph*), leftmargin=1.5em]
+            \item Викликаємо \texttt{createTask} з довільними параметрами. Мені перше прийшло на думку -- це список покупок. Тому 
+                \texttt{"Buy groceries"}, \texttt{"Milk, 10 Eggs, Bread, Sausages"}, \texttt{1} (Medium priority). І підтверджуємо 
+                наш запит-транзакцію в MetaMask.
+            \item Викликаємо \texttt{createTask} знову. Нехай на цей раз багатостраждальна лаба: \texttt{"Finish lab report"}, 
+                \texttt{"Complete Task 2 analysis"}, \texttt{2} (High priority). Теж підтверджуємо.
+            \item Викликаємо \texttt{getMyTasks} --- повертає нам масив з двох, встановлених щойно, задач.
+            \item Викликаємо \texttt{toggleComplete} з індексом \texttt{0} --- відмічає першу задачу як виконану.
+            \item Викликаємо \texttt{getStats} --- повертає статус поточних: total=2, completed=1, pending=1.
+            \item Викликаємо \texttt{deleteTask} with index \texttt{0} --- видаляє виконану задачу.
+            \item Викликаємо \texttt{getMyTasks} --- має показати лише одну задачу, яка залишилася.
+        \end{enumerate}
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen8.png}
+            \caption{Interaction results in Remix IDE}
+            \label{fig:screen8}
+        \end{figure}
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen9.png}
+            \caption{Result after deleting a task in Remix IDE}
+            \label{fig:screen9}
+        \end{figure}
+    \item \textbf{Verify on Etherscan} заходимо на \\ \texttt{https://sepolia.etherscan.io/address/<ADDRESS>}. 
+        Перевіряємо, що відбулися відповідні події (events) у логах транзакцій.
+        \begin{figure}[H]
+            \centering
+            \includegraphics[width=0.85\textwidth]{screenshots/screen10.png}
+            \caption{Etherscan showing events}
+            \label{fig:screen10}
+        \end{figure}
+\end{enumerate}
+
+\section{Висновки по тасці 2}
+
+В цьому завдані я створив смарт-контракт \textbf{TodoList} з повною CRUD (Create, Read, Update, Delete) функціональністю. Контракт демонструє нам 
+ключові можливості Solidity:
+\begin{enumerate}
+    \item Designed and developed an original \textbf{TodoList} smart contract implementing full CRUD functionality.
+    \item Demonstrated key Solidity features: \texttt{enum}, \texttt{struct}, nested \texttt{mapping}, custom \texttt{modifier}, \texttt{events}, and view functions.
+    \item Applied gas optimisation techniques including \texttt{external} visibility, \texttt{calldata} parameters, swap-and-pop deletion, and \texttt{unchecked} arithmetic.
+    \item Successfully deployed and tested the contract on the Sepolia testnet, verifying all operations via Remix IDE and Sepolia Etherscan.
+
+    \item Реалізували доволі оригінальний смарт-контракт \textbf{TodoList}, що має повну функціональність CRUD.
+    \item Продемонстрував ключові функції Solidity: \texttt{enum}, \texttt{struct}, вкладений \texttt{mapping}, 
+        власний \\ \texttt{modifier}, \texttt{events} та функції перегляду.
+    \item Трохи оптимізував витрати газу, використавги змінні \texttt{external}, параметри \texttt{calldata}, 
+        видалення swap-and-pop та арифметику \texttt{unchecked}.
+    \item Розгорнув цей контракт у тестовій мережі Sepolia, перевірив всі операції в середовищі Remix IDE та 
+        Sepolia Etherscan.
+\end{enumerate}
+
+\newpage
+\selectlanguage{english}
+\nocite{*}
+\printbibliography

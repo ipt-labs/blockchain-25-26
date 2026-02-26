@@ -1,0 +1,67 @@
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\setsansfont{Tahoma}
+\setmonofont{Roboto Mono}
+\usepackage[fontsize=12pt]{fontsize}
+\usepackage{microtype}
+\usepackage[english, ukrainian]{babel}
+\usepackage[
+    top = 40pt,
+    bottom = 20pt,
+    right = 50pt,
+    left = 50pt,
+    footskip = 15pt,
+    %showframe
+]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage[unicode,
+    bookmarks = true,
+]{hyperref}
+\hypersetup{
+    colorlinks = true,
+    linkcolor = [RGB]{255, 3, 209},
+    breaklinks = true,
+    filecolor = magenta,
+    citecolor = green,
+    anchorcolor = black,
+    urlcolor = cyan,
+}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{verbatim}
+\usepackage{fancyvrb}
+\usepackage[absolute,overlay]{textpos}
+\usepackage{minted}
+\setminted{
+    breaklines=true,
+    frame=single,
+    fontsize=\small,
+    linenos=true,
+    bgcolor=gray!5
+}
+\setminted[c]{
+    style=colorful
+}
+
+\usepackage{tabularray}
+\UseTblrLibrary{varwidth}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{titlesec}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{longtable}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, decorations.pathreplacing, fit, backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\usepackage[backend=biber,style=numeric,sorting=none]{biblatex}
+\renewcommand*{\mkbibacro}[1]{#1}
+\DeclareFieldFormat{url}{\href{#1}{\mkbibacro{(URL)}}}
+\usepackage{csquotes}

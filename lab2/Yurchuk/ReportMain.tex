@@ -1,0 +1,65 @@
+% !TEX program = lualatex
+\documentclass{article}
+\input{packages.tex}
+
+\addbibresource{references.bib}
+
+% Colors style
+\definecolor{codeframe}{RGB}{180,180,180}
+\definecolor{codebg}{RGB}{248,248,248}
+
+% Verbatim styling
+\DefineVerbatimEnvironment{code}{Verbatim}{
+    frame=single,
+    framesep=3mm,
+    rulecolor=\color{codeframe},
+    fillcolor=\color{codebg},
+    fontsize=\small,
+    breaklines=true,
+    breakanywhere=true
+}
+
+\begin{document}
+\input{title.tex}
+
+\makeatletter
+\renewcommand{\tableofcontents}{
+  \clearpage
+  \thispagestyle{empty}
+  \begin{center}
+          \bfseries\Large\MakeUppercase{Зміст}
+  \end{center}
+  \addvspace{42pt}
+  \@starttoc{toc}
+}
+\renewcommand{\@pnumwidth}{2em}
+\renewcommand{\@tocrmarg}{3em}
+\makeatother
+
+\tableofcontents
+\newpage
+
+\cleardoublepage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\newpage
+
+% Clear the header and footer
+\fancyhead{}
+\fancyfoot{}
+% Set the right side of the footer to be the page number
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\fancyfoot[C]{
+  \begin{textblock*}{2cm}(20cm,27.3cm) % bottom right corner of A4
+    \small\thepage
+  \end{textblock*}
+}
+\pagestyle{fancy}
+
+\newtheorem*{remark}{Примітка}
+
+\input{TaskOne.tex}
+\input{TaskTwo.tex}
+
+\end{document}
