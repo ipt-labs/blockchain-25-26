@@ -233,3 +233,135 @@ SSRF виникає, коли веб-додаток звертається до 
 В архітектурі dApp ризики SSRF зосереджені в сервісах бекенду, які взаємодіють з вузлами RPC блокчейну, 
 серверами метаданих токенів та шлюзами IPFS. Вразливість SSRF в API маршрутизації може дозволити зловмиснику 
 перенаправити виклики RPC на зловмисний вузол, який повертає сфальсифікований стан блокчейну.
+
+\section{Архітектура протоколу Uniswap}
+\label{sec:uniswap_arch}
+
+Uniswap це найбільша децентралізована біржа (DEX) на Ethereum за обсягом торгів. Вона дозволяє здійснювати обмін 
+токенами без посередників за допомогою моделі Automated Market Maker (AMM), де ліквідність забезпечується 
+користувачами в пулах на ланцюжку, а не через традиційну книгу замовлень. Протокол пройшов чотири основні 
+версії: v1 (2018), v2 (2020), v3 (2021) і v4 (2023), кожна з яких впроваджувала все більш досконалі механізми~\cite{uniswap_v2_whitepaper, uniswap_v3_whitepaper}.
+
+\subsection{Рівні архітектури Uniswap}
+
+Архітектура Uniswap охоплює кілька рівнів, кожен з яких має свої особливості безпеки та поверхні атаки. На 
+діаграмі~\ref{fig:uniswap_layers} можна спостерігати цю багаторівневу структуру:
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        layer/.style={
+                draw, rounded corners=6pt, minimum width=13cm,
+                minimum height=1.6cm, font=\sffamily, align=center,
+                text width=12cm, inner sep=8pt
+            },
+        arrow/.style={-{Stealth[length=6pt]}, thick, gray!70},
+        node distance=0.5cm
+        ]
+        % Layers from top to bottom
+        \node[layer, fill=uniPink!12, draw=uniPink!60] (fe)
+        {\textbf{Layer 5: User Interface (Front-End)}\\
+            \small React SPA served via Cloudflare $\cdot$ Wallet Connect SDK $\cdot$ app.uniswap.org};
+
+        \node[layer, fill=dappBlue!10, draw=dappBlue!50, below=of fe] (api)
+        {\textbf{Layer 4: Off-Chain Routing \& API}\\
+            \small Uniswap Auto Router $\cdot$ Subgraph Indexer (The Graph) $\cdot$ Token Lists};
+
+        \node[layer, fill=secGreen!10, draw=secGreen!60, below=of api] (router)
+        {\textbf{Layer 3: On-Chain Router Contracts}\\
+            \small SwapRouter $\cdot$ UniversalRouter $\cdot$ Permit2};
+
+        \node[layer, fill=owaspOrange!12, draw=owaspOrange!60, below=of router] (core)
+        {\textbf{Layer 2: Core Protocol Contracts}\\
+            \small UniswapV3Factory $\cdot$ UniswapV3Pool $\cdot$ NonfungiblePositionManager};
+
+        \node[layer, fill=gray!10, draw=gray!50, below=of core] (chain)
+        {\textbf{Layer 1: Ethereum Blockchain}\\
+            \small EVM execution $\cdot$ Consensus $\cdot$ Mempool $\cdot$ Block production};
+
+        % Arrows
+        \draw[arrow] (fe) -- (api);
+        \draw[arrow] (api) -- (router);
+        \draw[arrow] (router) -- (core);
+        \draw[arrow] (core) -- (chain);
+
+        % Side labels
+        \node[font=\sffamily\scriptsize, text=gray, rotate=90, anchor=south] at ([xshift=-7.2cm]$(fe)!0.5!(api)$) {HTTPS/WSS};
+        \node[font=\sffamily\scriptsize, text=gray, rotate=90, anchor=south] at ([xshift=-7.2cm]$(api)!0.5!(router)$) {JSON-RPC};
+        \node[font=\sffamily\scriptsize, text=gray, rotate=90, anchor=south] at ([xshift=-7.2cm]$(router)!0.5!(core)$) {EVM calls};
+        \node[font=\sffamily\scriptsize, text=gray, rotate=90, anchor=south] at ([xshift=-7.2cm]$(core)!0.5!(chain)$) {State transitions};
+
+    \end{tikzpicture}
+    \caption{Архітектура протоколу Uniswap.}
+    \label{fig:uniswap_layers}
+\end{figure}
+
+
+\subsection{Core Smart Contracts (Layer 2)}
+
+За рівень 1, як працює блокчейн з протоколами консенсусу, ми говорили в попердніх лабораторних, тому одразу перейдемо 
+і зосередимося на рівні 2. "Серце"{} Uniswap v3 складається з двох основних контрактів~\cite{uniswap_v3_whitepaper}:
+
+\textbf{UniswapV3Factory} -- це одноразовий(?) [singleton] контракт, який розгортає нові екземпляри пулу ліквідності. 
+Кожен пул параметризується парою токенів і рівнем комісії (0,01\%, 0,05\%, 0,3\%, або 1\%). Фабрика використовує 
+\texttt{CREATE2} для детермінованих адрес пулів, що дозволяє будь-якому учаснику передбачити адресу пулу до його розгортання.
+
+\textbf{UniswapV3Pool} implements the concentrated liquidity AMM. Unlike v2 (where liquidity is distributed uniformly across the entire price range $[0, \infty)$), v3 allows liquidity providers (LPs) to allocate capital within specific price ranges called ``ticks.'' This design dramatically improves capital efficiency but introduces complexity in position management, fee accounting, and oracle calculations.
+
+\textbf{UniswapV3Pool} реалізує AMM (Automated Market Maker) з сконцентрованою ліквідністю. На відміну від v2 
+(де ліквідність розподілялася рівномірно по всьому діапазону цін $[0, \infty)$), v3 дозволяє постачальникам 
+ліквідності (liquidity providers, LP) розподіляти капітал у межах певних діапазонів цін, які називаються "ticks". 
+Така конструкція значно покращує ефективність використання капіталу, але ускладнює управління позиціями, облік 
+комісій та обчислення оракулів.
+
+Формула добутку, що лежить в основі AMM Uniswap, виражається дуже простою рівністю:
+
+\begin{equation*}
+    x \cdot y = k
+\end{equation*}
+
+\noindent де $x$ та $y$ представляють резерви двох токенів in pool, а $k$ -- інваріант, який повинен підтримуватися 
+(або збільшуватися) після кожного обміну. У v3 ця формула діє в межах кожного активного діапазону тіків із використанням 
+віртуальних резервів, при цьому реальна ліквідність концентрується відповідно до позицій LP.
+
+По наступному шматочку кода можна бачити критичну сигнатуру функції \texttt{swap} з UniswapV3Pool:
+
+\begin{minted}{solidity}
+function swap(
+    address recipient,
+    bool zeroForOne,
+    int256 amountSpecified,
+    uint160 sqrtPriceLimitX96,
+    bytes calldata data
+) external override noDelegateCall returns (
+    int256 amount0,
+    int256 amount1
+);
+\end{minted}
+
+Модифікатор \texttt{noDelegateCall} є механізмом безпеки, що гарантує неможливість виконання pool's logic за 
+допомогою \texttt{DELEGATECALL} із зовнішнього контракту, який міг би маніпулювати контекстом зберігання.
+
+\subsection{Router and Periphery Contracts (Layer 3)}
+
+Користувачі не взаємодіють безпосередньо з контрактами. Натомість вони направляють транзакції через периферійні контракти:
+
+\textbf{SwapRouter02} обробляє багатоступеневі swaps (наприклад, ETH $\rightarrow$ USDC $\rightarrow$ DAI) і забезпечує 
+захист від прослизання (slippage) за допомогою перевірки мінімальної суми виходу. 
+
+\textbf{UniversalRouter} -- це нещодавнє доповнення, яке об'єднує обміни ERC-20, покупки NFT та затвердження Permit2 в 
+одну транзакцію.
+
+\textbf{Permit2} -- це менеджер затвердження токенів, який замінює застарілу модель ERC-20 \texttt{approve} на дозволи 
+на основі підпису, з обмеженим терміном дії та обмеженою сумою~\cite{uniswap_docs}.
+
+\subsection{Off-Chain Components (Layers 4--5)}
+
+Auto Router -- це позаланцюговий алгоритм, який обчислює оптимальний маршрут обміну між усіма пулами Uniswap і рівнями 
+комісій, а також між ліквідністю v2 і v3. Він використовує індексатор підграфіків (The Graph) для запиту поточного 
+стану пулів. Фронтенд -- це односторінковий додаток React (SPA), розміщений на традиційній веб-інфраструктурі 
+(Cloudflare CDN) з резервними розгортаннями на IPFS.
+
+Важливо (!) -- фронтенд обробляє підключення гаманця, побудову параметрів транзакції та потік підписання користувача. 
+Будь-яке порушення цього рівня дозволяє зловмиснику змінювати параметри транзакції до підписання користувачем, ефективно 
+викрадаючи кошти, незважаючи на безпеку самих смарт-контрактів.
